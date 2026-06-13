@@ -6,7 +6,8 @@ const PRESENT  = { owner: 4, steward: 2, custodian: 2 };
 
 export function initCatalogueEntries(
   existing: Record<string, CatalogueEntry>,
-  datasets: Dataset[]
+  datasets: Dataset[],
+  tick = 0
 ): Record<string, CatalogueEntry> {
   const updated = { ...existing };
   for (const ds of datasets) {
@@ -18,6 +19,7 @@ export function initCatalogueEntries(
         trustScore: 50,
         status: "shadow",
         governanceRisk: 0,
+        createdAtTick: tick,
       };
     }
   }

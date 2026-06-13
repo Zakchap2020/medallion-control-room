@@ -7,6 +7,7 @@ import { GovernancePanel } from "../governance/GovernancePanel";
 import { BottomFeed } from "../feed/BottomFeed";
 import { EndScreen } from "../endgame/EndScreen";
 import { ToastStack, showToast } from "../ui/ToastStack";
+import { PriorityQueue } from "../ui/PriorityQueue";
 import { computeFinalScore } from "../../engine/scoringEngine";
 
 // ── Shared visual tokens ─────────────────────────────────────────────────────
@@ -148,12 +149,8 @@ export function DashboardLayout() {
   const tick               = useGameStore((s) => s.tick);
   const trustScore         = useGameStore((s) => s.trustScore);
   const reputation         = useGameStore((s) => s.reputation);
-  const silos              = useGameStore((s) => s.silos);
-  const signals            = useGameStore((s) => s.signals);
-  const catalogue          = useGameStore((s) => s.catalogue);
   const incidents          = useGameStore((s) => s.incidents);
   const executivePressures = useGameStore((s) => s.executivePressures);
-  const datasets           = useGameStore((s) => s.datasets);
   const gamePhase          = useGameStore((s) => s.gamePhase);
   const characterEvents    = useGameStore((s) => s.characterEvents);
   const endSession         = useGameStore((s) => s.endSession);
@@ -204,13 +201,9 @@ export function DashboardLayout() {
 
   const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
 
-  // Derived counts
-  const activeSiloCount   = silos.filter((s) => s.discovered && !s.contained).length;
-  const unresolvedSignals = signals.filter((s) => !s.resolved).length;
-  const ungoverned        = Object.values(catalogue).filter((e) => !e.ownerId).length;
-  const activeIncidents   = incidents.filter((i) => i.status === "open" || i.status === "in_progress").length;
-  const activePressures   = executivePressures.filter((p) => p.status === "pending").length;
-  const goldCount         = datasets.filter((d) => d.layer === "gold").length;
+  // Derived counts (only what the top bar still needs)
+  const activeIncidents = incidents.filter((i) => i.status === "open" || i.status === "in_progress").length;
+  const activePressures = executivePressures.filter((p) => p.status === "pending").length;
 
   const criticalIncident = incidents.some(
     (i) => (i.status === "open" || i.status === "in_progress") && i.severity === "critical"
@@ -242,20 +235,14 @@ export function DashboardLayout() {
       {/* ── Top Bar ── */}
       <div style={styles.topBar}>
         <div style={styles.title}>⬡ Medallion Control Room</div>
-
-        <StatBadge label="Score"      value={liveScore}              color={scoreColor} />
+        <StatBadge label="Score"      value={liveScore}    color={scoreColor} />
         <Sep />
-        <StatBadge label="Tick"       value={tick}                   color="#666"      animKey={tick} />
-        <StatBadge label="Trust"      value={trustScore}             color={trustColor} animKey={`t${tick}`} />
-        <StatBadge label="Reputation" value={repDisplay}             color={repColor} />
+        <StatBadge label="Tick"       value={tick}         color="#555"      animKey={tick} />
+        <StatBadge label="Trust"      value={trustScore}   color={trustColor} animKey={`t${tick}`} />
+        <StatBadge label="Reputation" value={repDisplay}   color={repColor} />
         <Sep />
-        <StatBadge label="Incidents"  value={activeIncidents}  color={activeIncidents  > 0 ? "#ff4444" : "#1e1e1e"} blink={criticalIncident} />
-        <StatBadge label="Pressure"   value={activePressures}  color={activePressures  > 0 ? "#ff6600" : "#1e1e1e"} blink={urgentPressure} />
-        <StatBadge label="Silos"      value={activeSiloCount}  color={activeSiloCount  > 0 ? "#ff4444" : "#1e1e1e"} />
-        <StatBadge label="Signals"    value={unresolvedSignals} color={unresolvedSignals > 0 ? "#ffd700" : "#1e1e1e"} />
-        <Sep />
-        <StatBadge label="Ungoverned" value={ungoverned}  color={ungoverned > 3 ? "#ff4444" : ungoverned > 0 ? "#ffa500" : "#1e1e1e"} />
-        <StatBadge label="Gold"       value={goldCount}   color={goldCount > 0 ? "#c8a800" : "#1e1e1e"} />
+        <StatBadge label="Incidents"  value={activeIncidents} color={activeIncidents > 0 ? "#ff4444" : "#1e1e1e"} blink={criticalIncident} />
+        <StatBadge label="Pressure"   value={activePressures} color={activePressures > 0 ? "#ff6600" : "#1e1e1e"} blink={urgentPressure} />
       </div>
 
       {/* ── Main panels ── */}
@@ -268,8 +255,9 @@ export function DashboardLayout() {
           </div>
         </div>
 
-        {/* Center: Silo Monitor */}
+        {/* Center: Priority triage + Silo Monitor */}
         <div style={styles.centerPanel}>
+          <PriorityQueue />
           <SiloPanel />
         </div>
 

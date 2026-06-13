@@ -1,5 +1,6 @@
 export type Department = "Finance" | "Sales" | "Marketing" | "HR" | "Operations";
 export type DataLayer  = "bronze" | "silver" | "gold";
+export type DataClassification = "public" | "internal" | "confidential" | "restricted";
 
 export interface DatasetQuality {
   accuracy:     number;
@@ -67,6 +68,9 @@ export interface Person {
   name: string;
   roleType: PersonRoleType;
   skills: { governance: number; analysis: number; engineering: number };
+  active?: boolean;
+  departsAtTick?: number;
+  returnsAtTick?: number;
 }
 
 export interface CatalogueEntry {
@@ -79,6 +83,8 @@ export interface CatalogueEntry {
   trustScore: number;
   status: "official" | "shadow" | "deprecated";
   governanceRisk: number;
+  classification?: DataClassification;
+  createdAtTick?: number;
 }
 
 // ── Phase 4 ──────────────────────────────────────────────────────────────────
@@ -88,7 +94,10 @@ export type IncidentType =
   | "kpi_mismatch"
   | "silo_dependency_failure"
   | "governance_failure"
-  | "pipeline_break";
+  | "pipeline_break"
+  | "data_breach"
+  | "unclassified_sensitive_data"
+  | "compliance_audit_failed";
 
 export type IncidentSeverity = "low" | "medium" | "high" | "critical";
 export type IncidentStatus   = "open" | "in_progress" | "resolved" | "failed";
@@ -192,4 +201,8 @@ export interface GameState {
   peakTrustScore: number;
   // Character events (narrative moments referencing real people + datasets)
   characterEvents: string[];
+  // New mechanics
+  nextAuditTick: number;
+  auditsPassed: number;
+  auditsFailed: number;
 }

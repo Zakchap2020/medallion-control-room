@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { useGameStore } from "../../state/store";
 import { compositeQuality } from "../../engine/medallionEngine";
 import type { Dataset } from "../../models/types";
+
+type CatalogueFilter = "all" | "at_risk" | "ungoverned" | "gold";
 
 const DEPT_COLORS: Record<string, string> = {
   Finance:    "#ffd700",
@@ -75,16 +78,34 @@ function LayerBadge({ ds }: { ds: Dataset }) {
   );
 }
 
+const FILTER_LABELS: Record<CatalogueFilter, string> = {
+  all: "All",
+  at_risk: "At Risk",
+  ungoverned: "Ungoverned",
+  gold: "Gold",
+};
+
 export function DatasetCatalogue({ selectedId, onSelect }: Props) {
   const datasets  = useGameStore((s) => s.datasets);
   const catalogue = useGameStore((s) => s.catalogue);
+  const [filter, setFilter] = useState<CatalogueFilter>("all");
 
   const bronze = datasets.filter((d) => d.layer === "bronze").length;
   const silver = datasets.filter((d) => d.layer === "silver").length;
   const gold   = datasets.filter((d) => d.layer === "gold").length;
 
+  const filtered = [...datasets].filter((ds) => {
+    const entry = catalogue[ds.id];
+    const cq    = compositeQuality(ds.quality);
+    const risk  = entry?.governanceRisk ?? 0;
+    if (filter === "at_risk")    return cq < 60 || risk > 65;
+    if (filter === "ungoverned") return !entry?.ownerId;
+    if (filter === "gold")       return ds.layer === "gold";
+    return true;
+  });
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "3px", overflowY: "auto", height: "100%" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "3px", height: "100%", overflow: "hidden" }}>
       {/* Summary line */}
       <div style={{
         display: "flex",
@@ -100,13 +121,47 @@ export function DatasetCatalogue({ selectedId, onSelect }: Props) {
         {bronze > 0 && <span style={{ color: "#4a2a0e" }}>{bronze}B</span>}
       </div>
 
+      {/* Filter buttons */}
+      <div style={{ display: "flex", gap: "2px", flexShrink: 0, marginBottom: "4px" }}>
+        {(["all", "at_risk", "ungoverned", "gold"] as CatalogueFilter[]).map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            style={{
+              flex: 1,
+              background: filter === f ? "#1a1a1a" : "transparent",
+              border: `1px solid ${filter === f ? "#2a2a2a" : "#141414"}`,
+              color: filter === f
+                ? (f === "at_risk" ? "#ff6600" : f === "ungoverned" ? "#ff4444" : f === "gold" ? "#c8a800" : "#c0c0c0")
+                : "#2a2a2a",
+              fontFamily: "'Courier New', Courier, monospace",
+              fontSize: "8px",
+              padding: "3px 0",
+              borderRadius: "2px",
+              cursor: "pointer",
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+            }}
+          >
+            {FILTER_LABELS[f]}
+          </button>
+        ))}
+      </div>
+
       {datasets.length === 0 && (
         <div style={{ color: "#222", fontStyle: "italic", fontSize: "11px", paddingTop: "12px" }}>
           No datasets. Run a tick.
         </div>
       )}
 
-      {[...datasets].reverse().map((ds) => {
+      {filtered.length === 0 && datasets.length > 0 && (
+        <div style={{ color: "#1e1e1e", fontSize: "10px", paddingTop: "8px", textAlign: "center" }}>
+          No {FILTER_LABELS[filter].toLowerCase()} datasets
+        </div>
+      )}
+
+      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "3px" }}>
+      {[...filtered].reverse().map((ds) => {
         const entry      = catalogue[ds.id];
         const isSelected = selectedId === ds.id;
         const risk       = entry?.governanceRisk ?? 0;
@@ -195,6 +250,7 @@ export function DatasetCatalogue({ selectedId, onSelect }: Props) {
           </div>
         );
       })}
+      </div>
     </div>
   );
 }

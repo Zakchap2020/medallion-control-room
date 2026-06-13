@@ -1,5 +1,6 @@
 import { useGameStore } from "../../state/store";
 import { showToast } from "../ui/ToastStack";
+import { compositeQuality } from "../../engine/medallionEngine";
 
 const DEPT_COLORS: Record<string, string> = {
   Finance:    "#ffd700",
@@ -25,6 +26,8 @@ function riskLabel(risk: number): string {
 
 export function SiloPanel() {
   const silos      = useGameStore((s) => s.silos);
+  const datasets   = useGameStore((s) => s.datasets);
+  const catalogue  = useGameStore((s) => s.catalogue);
   const containSilo = useGameStore((s) => s.containSilo);
 
   const activeSilos    = silos.filter((s) => s.discovered && !s.contained);
@@ -86,19 +89,61 @@ export function SiloPanel() {
         flexDirection: "column",
         gap: "6px",
       }}>
-        {activeSilos.length === 0 && (
-          <div style={{
-            color: "#1e1e1e",
-            textAlign: "center",
-            paddingTop: "48px",
-            fontSize: "11px",
-            letterSpacing: "0.06em",
-          }}>
-            {silos.length === 0
-              ? "No silos detected"
-              : "No active silos — assign analysts to departments"}
-          </div>
-        )}
+        {activeSilos.length === 0 && (() => {
+          if (silos.length === 0 && datasets.length === 0) {
+            return (
+              <div style={{ color: "#1e1e1e", textAlign: "center", paddingTop: "48px", fontSize: "11px" }}>
+                No silos detected
+              </div>
+            );
+          }
+          const goldCount      = datasets.filter((d) => d.layer === "gold").length;
+          const silverCount    = datasets.filter((d) => d.layer === "silver").length;
+          const bronzeCount    = datasets.filter((d) => d.layer === "bronze").length;
+          const avgQuality     = datasets.length > 0
+            ? Math.round(datasets.reduce((sum, d) => sum + compositeQuality(d.quality), 0) / datasets.length)
+            : 0;
+          const ungoverned     = Object.values(catalogue).filter((e) => !e.ownerId).length;
+          const qColor         = avgQuality >= 70 ? "#00ff88" : avgQuality >= 50 ? "#ffa500" : "#ff4444";
+          return (
+            <div style={{ padding: "20px 16px", display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: "9px", color: "#1a4a1a", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "4px" }}>
+                  ● All silos contained
+                </div>
+                <div style={{ fontSize: "8px", color: "#1a2a1a", letterSpacing: "0.08em" }}>
+                  {containedCount > 0 ? `${containedCount} previously contained` : "No silos detected this session"}
+                </div>
+              </div>
+
+              {/* Health grid */}
+              {datasets.length > 0 && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                  {[
+                    { label: "Avg Quality", value: `${avgQuality}`, color: qColor },
+                    { label: "Ungoverned", value: `${ungoverned}`, color: ungoverned > 3 ? "#ff4444" : ungoverned > 0 ? "#ffa500" : "#00ff88" },
+                    { label: "Gold Layer", value: `${goldCount}`, color: goldCount > 0 ? "#c8a800" : "#1e1e1e" },
+                    { label: "Pipeline", value: `${bronzeCount}B / ${silverCount}S / ${goldCount}G`, color: "#333" },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} style={{
+                      background: "#0c0c0c",
+                      border: "1px solid #141414",
+                      borderRadius: "3px",
+                      padding: "7px 9px",
+                    }}>
+                      <div style={{ fontSize: "8px", color: "#252525", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "3px" }}>
+                        {label}
+                      </div>
+                      <div style={{ fontSize: "14px", fontWeight: "bold", color, fontFamily: "monospace" }}>
+                        {value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Sort: highest risk first */}
         {[...activeSilos]

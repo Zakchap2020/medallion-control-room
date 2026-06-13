@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useGameStore } from "../../state/store";
-import type { PersonRoleType, DatasetQuality } from "../../models/types";
+import type { PersonRoleType, DatasetQuality, DataClassification } from "../../models/types";
 import { showToast } from "../ui/ToastStack";
+import { compositeQuality } from "../../engine/medallionEngine";
 
 interface Props {
   selectedDatasetId: string | null;
@@ -135,11 +137,15 @@ const ROLE_TOAST: Record<PersonRoleType, string> = {
 // ── Main panel ────────────────────────────────────────────────────────────────
 
 export function GovernancePanel({ selectedDatasetId }: Props) {
-  const persons            = useGameStore((s) => s.persons);
-  const catalogue          = useGameStore((s) => s.catalogue);
-  const datasets           = useGameStore((s) => s.datasets);
+  const persons              = useGameStore((s) => s.persons);
+  const catalogue            = useGameStore((s) => s.catalogue);
+  const datasets             = useGameStore((s) => s.datasets);
+  const tick                 = useGameStore((s) => s.tick);
   const assignGovernanceRole = useGameStore((s) => s.assignGovernanceRole);
-  const toggleAutoFix       = useGameStore((s) => s.toggleAutoFix);
+  const toggleAutoFix        = useGameStore((s) => s.toggleAutoFix);
+  const promoteDataset       = useGameStore((s) => s.promoteDataset);
+  const setClassification    = useGameStore((s) => s.setClassification);
+  const [expandedDesc, setExpandedDesc] = useState<PersonRoleType | null>(null);
 
   if (!selectedDatasetId) {
     return (
@@ -254,15 +260,113 @@ export function GovernancePanel({ selectedDatasetId }: Props) {
         </div>
       </div>
 
-      {/* Pipeline position */}
+      {/* Data Classification */}
+      {(() => {
+        const cls = entry.classification;
+        const CLASSIFICATIONS: { value: DataClassification; label: string; color: string; desc: string }[] = [
+          { value: "public",       label: "Public",       color: "#00bfff", desc: "Freely shareable, no restrictions" },
+          { value: "internal",     label: "Internal",     color: "#00ff88", desc: "Internal use only" },
+          { value: "confidential", label: "Confidential", color: "#ffa500", desc: "Restricted access, breach risk if exposed" },
+          { value: "restricted",   label: "Restricted",   color: "#ff4444", desc: "Highest protection required, custodian mandatory" },
+        ];
+        const isUnclassified = !cls;
+        const createdAt = entry.createdAtTick ?? 0;
+        const staleness = tick - createdAt;
+        return (
+          <div style={{
+            background: "#0c0c0c",
+            border: `1px solid ${isUnclassified && staleness > 5 ? "#ff444433" : "#1a1a1a"}`,
+            borderRadius: "3px",
+            padding: "8px 10px",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "7px" }}>
+              <div style={{ fontSize: "9px", color: "#2a2a2a", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                Data Classification
+              </div>
+              {isUnclassified && staleness > 5 && (
+                <span style={{ fontSize: "8px", color: "#ff444488", letterSpacing: "0.04em" }}>
+                  ⚠ unclassified
+                </span>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: "3px" }}>
+              {CLASSIFICATIONS.map((c) => (
+                <button
+                  key={c.value}
+                  title={c.desc}
+                  onClick={() => {
+                    setClassification(dataset.id, cls === c.value ? undefined : c.value);
+                    showToast(`${entry.name} classified as ${c.label}`, "info");
+                  }}
+                  style={{
+                    flex: 1,
+                    background: cls === c.value ? "#0f0f0f" : "transparent",
+                    border: `1px solid ${cls === c.value ? c.color + "88" : "#1a1a1a"}`,
+                    color: cls === c.value ? c.color : "#252525",
+                    fontFamily: "inherit",
+                    fontSize: "7px",
+                    padding: "3px 2px",
+                    borderRadius: "2px",
+                    cursor: "pointer",
+                    letterSpacing: "0.04em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Pipeline position + Promote */}
       <div style={{
         background: "#0c0c0c",
         border: "1px solid #1a1a1a",
         borderRadius: "3px",
         padding: "8px 10px",
       }}>
-        <div style={{ fontSize: "9px", color: "#2a2a2a", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "8px" }}>
-          Pipeline Position
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+          <div style={{ fontSize: "9px", color: "#2a2a2a", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+            Pipeline Position
+          </div>
+          {(() => {
+            const cq = compositeQuality(dataset.quality);
+            const canPromote =
+              (dataset.layer === "bronze" && cq > 65 && !!entry.custodianId) ||
+              (dataset.layer === "silver" && cq > 80 && !!entry.ownerId && !!entry.stewardId);
+            const isGold = dataset.layer === "gold";
+            if (isGold) return (
+              <span style={{ fontSize: "8px", color: "#a08800", letterSpacing: "0.04em" }}>● Gold</span>
+            );
+            const reason = dataset.layer === "bronze"
+              ? !entry.custodianId ? "needs custodian" : "quality < 65"
+              : !entry.ownerId || !entry.stewardId ? "needs owner + steward" : "quality < 80";
+            return (
+              <button
+                onClick={() => {
+                  if (!canPromote) return;
+                  promoteDataset(dataset.id);
+                  showToast(`${entry.name} promoted to ${dataset.layer === "bronze" ? "Silver" : "Gold"}`, "success");
+                }}
+                title={canPromote ? `Promote to ${dataset.layer === "bronze" ? "Silver" : "Gold"}` : reason}
+                style={{
+                  background: canPromote ? "#001a0d" : "transparent",
+                  border: `1px solid ${canPromote ? "#00ff8855" : "#1a1a1a"}`,
+                  color: canPromote ? "#00ff88" : "#222",
+                  fontFamily: "inherit",
+                  fontSize: "8px",
+                  padding: "2px 8px",
+                  borderRadius: "2px",
+                  cursor: canPromote ? "pointer" : "default",
+                  letterSpacing: "0.05em",
+                }}
+              >
+                {canPromote ? `Promote →` : `Promote (${reason})`}
+              </button>
+            );
+          })()}
         </div>
         <PipelinePosition current={dataset.layer} />
       </div>
@@ -306,16 +410,36 @@ export function GovernancePanel({ selectedDatasetId }: Props) {
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "3px" }}>
-                  <span style={{ fontSize: "9px", color: "#444", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                    {ROLE_LABELS[role]}
-                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                    <span style={{ fontSize: "9px", color: "#444", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                      {ROLE_LABELS[role]}
+                    </span>
+                    <button
+                      onClick={() => setExpandedDesc(expandedDesc === role ? null : role)}
+                      title="What does this role do?"
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: expandedDesc === role ? "#555" : "#252525",
+                        cursor: "pointer",
+                        fontSize: "9px",
+                        padding: "0",
+                        lineHeight: 1,
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      ⓘ
+                    </button>
+                  </div>
                   {current && (
                     <span style={{ fontSize: "9px", color: "#00ff88" }}>✓ {current.name}</span>
                   )}
                 </div>
-                <div style={{ fontSize: "8px", color: "#1e1e1e", marginBottom: "5px", lineHeight: "1.5" }}>
-                  {ROLE_DESC[role]}
-                </div>
+                {expandedDesc === role && (
+                  <div style={{ fontSize: "8px", color: "#383838", marginBottom: "5px", lineHeight: "1.5" }}>
+                    {ROLE_DESC[role]}
+                  </div>
+                )}
                 <select
                   value={currentId ?? ""}
                   onChange={(e) => handleAssign(role, e.target.value || undefined)}
@@ -333,10 +457,20 @@ export function GovernancePanel({ selectedDatasetId }: Props) {
                 >
                   <option value="">— Unassigned —</option>
                   {eligible.map((p) => {
-                    const onDataset = occupied.get(p.id);
+                    const onDataset   = occupied.get(p.id);
+                    const isInactive  = p.active === false;
+                    const isDeparting = !!p.departsAtTick;
+                    const ticksLeft   = isDeparting ? (p.departsAtTick! - tick) : null;
+                    const suffix      = isInactive
+                      ? " [on leave]"
+                      : isDeparting
+                      ? ` ⚠ leaving in ${ticksLeft}T`
+                      : onDataset
+                      ? ` — on: ${onDataset}`
+                      : "";
                     return (
-                      <option key={p.id} value={p.id}>
-                        {p.name} (gov:{p.skills.governance}){onDataset ? ` — on: ${onDataset}` : ""}
+                      <option key={p.id} value={p.id} disabled={isInactive}>
+                        {p.name} (gov:{p.skills.governance}){suffix}
                       </option>
                     );
                   })}

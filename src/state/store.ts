@@ -6,9 +6,11 @@ import type {
   Department,
   PersonRoleType,
   GamePhase,
+  DataClassification,
 } from "../models/types";
 
 import { runTick } from "../engine/runTick";
+import { compositeQuality } from "../engine/medallionEngine";
 
 const INITIAL_ANALYSTS: Analyst[] = [
   { id: "analyst-1", name: "Alice Morgan", skills: { analysis: 7, governance: 5 }, active: true },
@@ -40,6 +42,8 @@ interface GameStore extends GameState {
   endSession: () => void;
   continueSession: () => void;
   resetGame: () => void;
+  promoteDataset: (datasetId: string) => void;
+  setClassification: (datasetId: string, classification: DataClassification | undefined) => void;
 }
 
 const INITIAL_GAME_STATE: GameState = {
@@ -58,6 +62,9 @@ const INITIAL_GAME_STATE: GameState = {
   gamePhase: "playing" as GamePhase,
   peakTrustScore: 0,
   characterEvents: [],
+  nextAuditTick: 30,
+  auditsPassed: 0,
+  auditsFailed: 0,
 };
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -185,5 +192,50 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   resetGame: () => {
     set({ ...INITIAL_GAME_STATE });
+  },
+
+  setClassification: (datasetId, classification) => {
+    set((s) => ({
+      catalogue: {
+        ...s.catalogue,
+        [datasetId]: { ...s.catalogue[datasetId], classification },
+      },
+    }));
+  },
+
+  promoteDataset: (datasetId) => {
+    set((s) => {
+      const ds    = s.datasets.find((d) => d.id === datasetId);
+      const entry = s.catalogue[datasetId];
+      if (!ds || !entry) return {};
+
+      const cq = compositeQuality(ds.quality);
+
+      const boost = (q: typeof ds.quality, amounts: Partial<typeof ds.quality>) => ({
+        accuracy:     Math.min(100, q.accuracy     + (amounts.accuracy     ?? 0)),
+        completeness: Math.min(100, q.completeness + (amounts.completeness ?? 0)),
+        consistency:  Math.min(100, q.consistency  + (amounts.consistency  ?? 0)),
+        uniqueness:   Math.min(100, q.uniqueness   + (amounts.uniqueness   ?? 0)),
+        timeliness:   Math.min(100, q.timeliness   + (amounts.timeliness   ?? 0)),
+      });
+
+      if (ds.layer === "bronze" && cq > 65 && entry.custodianId) {
+        const quality = boost(ds.quality, { completeness: 10, consistency: 12, timeliness: 7 });
+        return {
+          datasets:  s.datasets.map((d)  => d.id === datasetId  ? { ...d,  layer: "silver" as const, quality } : d),
+          catalogue: { ...s.catalogue, [datasetId]: { ...entry, layer: "silver" as const } },
+        };
+      }
+
+      if (ds.layer === "silver" && cq > 80 && entry.ownerId && entry.stewardId) {
+        const quality = boost(ds.quality, { accuracy: 10, consistency: 10, uniqueness: 6, timeliness: 8 });
+        return {
+          datasets:  s.datasets.map((d)  => d.id === datasetId  ? { ...d,  layer: "gold" as const, quality } : d),
+          catalogue: { ...s.catalogue, [datasetId]: { ...entry, layer: "gold" as const } },
+        };
+      }
+
+      return {};
+    });
   },
 }));
