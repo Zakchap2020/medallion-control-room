@@ -1,367 +1,253 @@
-import type { GameState, Incident, ExecutivePressure } from "../models/types";
-import { compositeQuality } from "./medallionEngine";
-import { TRAIT_DEPARTURE_CHANCE } from "./personnelGenerator";
-import { generateBronzeDatasets } from "./datasetGenerator";
-import { updateSiloRisks, spawnNewSilos, computeSiloTrustDelta } from "./siloEngine";
-import { generateSignals } from "./analystEngine";
-import {
-  initCatalogueEntries,
-  updateGovernanceRisks,
-  computeGovernanceTrustDelta,
-} from "./governanceEngine";
-import {
-  generateIncidents,
-  tickIncidents,
-  computeIncidentTrustDelta,
-} from "./incidentEngine";
-import {
-  generateExecutivePressure,
-  tickExecutivePressures,
-} from "./executivePressureEngine";
-import {
-  applyQualityDrift,
-  runAutoFix,
-  promoteDatasets,
-  computeQualityTrustDelta,
-} from "./medallionEngine";
-import { generateCharacterEvent } from "./characterEngine";
+import type { GameState, DatasetState, QualityDimensions, NarrativeEvent } from "../models/types";
+import { FIXED_DATASETS, DATASET_BY_ID } from "../data/datasets";
+import { INITIATIVE_BY_KEY } from "../data/initiatives";
+import { generateCausalPressures, tickPressureLifecycle } from "./causalEngine";
+import { computeMaturity } from "./maturityEngine";
+import { compositeQuality, layerForState } from "./qualityUtils";
+import { playSound } from "./soundEngine";
 
-const MAX_HEALING_HISTORY = 40;
+const CYCLE_LENGTH = 15;
 
-export function runTick(state: GameState): Partial<GameState> {
-  const nextTick = state.tick + 1;
+// ── Quality drift per tick ─────────────────────────────────────────────────
 
-  // 1. Generate bronze datasets
-  const newDatasets = generateBronzeDatasets(nextTick);
-  const allDatasets = [...state.datasets, ...newDatasets];
+function driftDataset(ds: DatasetState, tick: number, floors: Map<string, number>): DatasetState {
+  const fd = DATASET_BY_ID[ds.id];
+  if (!fd) return ds;
 
-  // 2. Catalogue: init new entries + update governance risk
-  const catalogueWithNew = initCatalogueEntries(state.catalogue, allDatasets, nextTick);
-  const updatedCatalogue = updateGovernanceRisks(catalogueWithNew);
+  const base = fd.criticality * 0.3;
+  const protection = (ds.ownerId ? 0.5 : 0) + (ds.stewardId ? 0.6 : 0) + ((ds.custodianId || ds.engineerId) ? 0.3 : 0);
+  const net = Math.max(0, base - protection);
+  const v = () => (Math.random() - 0.5) * 1.0;
+  const floor = floors.get(ds.id) ?? 0;
+  const cl = (x: number) => Math.min(100, Math.max(floor, x));
 
-  // 3. Silos: update risk + spawn
-  const updatedSilos = updateSiloRisks(state.silos);
-  const stateForSilos: GameState = {
-    ...state,
-    datasets: allDatasets,
-    silos: updatedSilos,
-    catalogue: updatedCatalogue,
+  const q: QualityDimensions = {
+    completeness: cl(ds.quality.completeness - net * 0.8 + v()),
+    accuracy:     cl(ds.quality.accuracy     - net * 1.0 + v()),
+    consistency:  cl(ds.quality.consistency  - net * 0.9 + v()),
+    timeliness:   cl(ds.quality.timeliness   - net * 0.7 + v()),
+    validity:     cl(ds.quality.validity      - net * 0.8 + v()),
   };
-  const newSilos = spawnNewSilos(stateForSilos, nextTick);
-  const allSilos = [...updatedSilos, ...newSilos];
 
-  // 4. Analyst + governance signals
-  const stateForSignals: GameState = {
-    ...state,
-    datasets: allDatasets,
-    silos: allSilos,
-    catalogue: updatedCatalogue,
+  // Governed datasets slowly improve
+  if (protection >= 1.2 && tick % 3 === 0) {
+    q.accuracy     = cl(q.accuracy     + 0.8);
+    q.completeness = cl(q.completeness + 0.6);
+    q.consistency  = cl(q.consistency  + 0.5);
+  }
+
+  const risk = Math.min(100, Math.max(0,
+    ds.governanceRisk
+    + (ds.ownerId ? -0.5 : 0.4)
+    + (ds.stewardId ? -0.4 : 0.3)
+    + ((ds.custodianId || ds.engineerId) ? -0.3 : 0.2)
+  ));
+
+  return { ...ds, quality: q, layer: layerForState({ ...ds, quality: q }), governanceRisk: risk, lastReviewedTick: tick };
+}
+
+// ── Stakeholder patience ───────────────────────────────────────────────────
+
+function tickStakeholders(state: GameState): GameState["stakeholders"] {
+  const execLiteracy = state.initiatives.some((i) => i.key === "executive-data-literacy" && i.status === "completed");
+  const bonus = execLiteracy ? 0.4 : 0;
+  return state.stakeholders.map((s) => {
+    const drain = state.pressures.filter((p) => p.status === "open" && p.sourceStakeholderId === s.id).length * 0.8;
+    const decay = Math.max(0, 0.3 + drain - bonus);
+    return { ...s, patience: Math.max(0, Math.min(100, s.patience - decay)) };
+  });
+}
+
+// ── Initiative progress ────────────────────────────────────────────────────
+
+function tickInitiatives(state: GameState, tick: number): GameState["initiatives"] {
+  return state.initiatives.map((ini) => {
+    if (ini.status !== "active") return ini;
+    const elapsed  = tick - ini.tickStarted;
+    const total    = ini.tickCompletes - ini.tickStarted;
+    const progress = Math.min(100, Math.round((elapsed / total) * 100));
+    const status   = tick >= ini.tickCompletes ? "completed" as const : "active" as const;
+    return { ...ini, progress, status };
+  });
+}
+
+// ── Quality floors from completed initiatives ──────────────────────────────
+
+function buildFloors(state: GameState): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const ini of state.initiatives) {
+    if (ini.status !== "completed") continue;
+    const def = INITIATIVE_BY_KEY[ini.key];
+    if (!def) continue;
+    for (const e of def.effects) {
+      if (e.type !== "quality_floor") continue;
+      if (e.target) {
+        m.set(e.target, Math.max(m.get(e.target) ?? 0, e.value));
+      } else {
+        for (const fd of FIXED_DATASETS) {
+          m.set(fd.id, Math.max(m.get(fd.id) ?? 0, e.value));
+        }
+      }
+    }
+  }
+  return m;
+}
+
+// ── Base capacity by model ─────────────────────────────────────────────────
+
+function baseCapacity(state: GameState): number {
+  const completed = state.initiatives.filter((i) => i.status === "completed");
+  let cap = state.governanceModel === "centralised" ? 4 : state.governanceModel === "federated" ? 6 : 3;
+  for (const ini of completed) {
+    const def = INITIATIVE_BY_KEY[ini.key];
+    if (!def) continue;
+    for (const e of def.effects) {
+      if (e.type === "capacity_increase") cap += e.value;
+    }
+  }
+  return cap;
+}
+
+// ── Trust score ────────────────────────────────────────────────────────────
+
+function computeTrust(state: GameState): number {
+  const all = FIXED_DATASETS;
+  let totalW = 0, weightedQ = 0;
+  for (const fd of all) {
+    const ds = state.datasets[fd.id];
+    if (!ds) continue;
+    totalW    += fd.criticality;
+    weightedQ += compositeQuality(ds.quality) * fd.criticality;
+  }
+  const avgQ = totalW > 0 ? weightedQ / totalW : 50;
+  const avgP = state.stakeholders.length > 0
+    ? state.stakeholders.reduce((s, k) => s + k.patience, 0) / state.stakeholders.length
+    : 50;
+  const owned = all.filter((d) => state.datasets[d.id]?.ownerId).length;
+  const stew  = all.filter((d) => state.datasets[d.id]?.stewardId).length;
+  const tech  = all.filter((d) => state.datasets[d.id]?.custodianId || state.datasets[d.id]?.engineerId).length;
+  const govCov = ((owned + stew + tech) / (all.length * 3)) * 100;
+  const bonus  = state.initiatives.filter((i) => i.status === "completed").length * 2;
+  return Math.min(100, Math.max(0, Math.round(avgQ * 0.4 + avgP * 0.3 + govCov * 0.3 + bonus)));
+}
+
+// ── Narrative events ───────────────────────────────────────────────────────
+
+let _neIdx = 0;
+function neId(): string { return `ne-${++_neIdx}`; }
+
+function makeNarrativeEvents(
+  newPressures: GameState["pressures"],
+  completedNow: string[],
+  tick: number
+): NarrativeEvent[] {
+  const events: NarrativeEvent[] = [];
+
+  for (const p of newPressures) {
+    const domain = DATASET_BY_ID[p.affectedDatasets[0] ?? ""]?.domain;
+    events.push({ id: neId(), tick, type: "pressure", title: p.title, body: p.description, domain, severity: p.urgency === "critical" ? "critical" : "high" });
+    playSound("incident_critical");
+  }
+
+  for (const key of completedNow) {
+    const def = INITIATIVE_BY_KEY[key];
+    events.push({ id: neId(), tick, type: "initiative", title: `${def?.shortName ?? key} — Complete`, body: `The ${def?.name ?? key} has concluded. Long-term effects are now active.`, severity: "info" });
+    playSound("promotion_gold");
+  }
+
+  return events;
+}
+
+// ── Delayed effects ────────────────────────────────────────────────────────
+
+function processDelayed(state: GameState, tick: number): Pick<GameState, "trustScore" | "stakeholders" | "delayedEffects" | "narrativeLog"> {
+  const due    = state.delayedEffects.filter((d) => d.firesAtTick <= tick);
+  const future = state.delayedEffects.filter((d) => d.firesAtTick > tick);
+  if (due.length === 0) return { trustScore: state.trustScore, stakeholders: state.stakeholders, delayedEffects: future, narrativeLog: state.narrativeLog };
+
+  let trustDelta = 0;
+  const extras: NarrativeEvent[] = [];
+  const updatedStakeholders = [...state.stakeholders];
+  for (const d of due) {
+    if (d.trustDelta) trustDelta += d.trustDelta;
+    if (d.patienceDelta && d.stakeholderId) {
+      const idx = updatedStakeholders.findIndex((s) => s.id === d.stakeholderId);
+      if (idx >= 0) {
+        updatedStakeholders[idx] = { ...updatedStakeholders[idx], patience: Math.min(100, Math.max(0, updatedStakeholders[idx].patience + d.patienceDelta)) };
+      }
+    }
+    if (d.narrative) extras.push({ id: neId(), tick, type: "story", title: "Consequence", body: d.narrative, severity: "medium" });
+  }
+  return {
+    trustScore: Math.min(100, Math.max(0, state.trustScore + trustDelta)),
+    stakeholders: updatedStakeholders,
+    delayedEffects: future,
+    narrativeLog: [...extras, ...state.narrativeLog],
   };
-  const newSignals = generateSignals(stateForSignals, nextTick);
-  const allSignals = [...state.signals, ...newSignals];
+}
 
-  // 5. Incidents: tick existing timers + generate new
-  const stateForIncidents: GameState = {
-    ...state,
-    datasets: allDatasets,
-    silos: allSilos,
-    signals: allSignals,
-    catalogue: updatedCatalogue,
-  };
-  const { updated: tickedIncidents, reputationDelta: incRepDelta } =
-    tickIncidents(state.incidents);
-  const newIncidents = generateIncidents(stateForIncidents, nextTick);
-  const allIncidents = [...tickedIncidents, ...newIncidents];
+// ── Main ──────────────────────────────────────────────────────────────────
 
-  // 6. Executive pressure: tick timers + generate new
-  const { updated: tickedPressures, reputationDelta: execRepDelta } =
-    tickExecutivePressures(state.executivePressures);
-  const stateForExec: GameState = { ...stateForIncidents, incidents: allIncidents };
-  const newPressures = generateExecutivePressure(stateForExec, nextTick);
+export function runOneTick(state: GameState): Partial<GameState> {
+  const tick = state.tick + 1;
+
+  // 1. Cycle boundary — refresh capacity
+  let cycleCapacity = { ...state.cycleCapacity };
+  if (tick % CYCLE_LENGTH === 0) {
+    const newTotal = baseCapacity(state);
+    cycleCapacity  = { total: Math.max(state.cycleCapacity.total, newTotal), used: 0, cycleStartTick: tick };
+    playSound("tick");
+  }
+
+  // 2. Build floors
+  const floors = buildFloors(state);
+
+  // 3. Drift datasets
+  const driftedDs: Record<string, DatasetState> = {};
+  for (const [id, ds] of Object.entries(state.datasets)) driftedDs[id] = driftDataset(ds, tick, floors);
+
+  // 4. Tick initiatives
+  const prevKeys = new Set(state.initiatives.filter((i) => i.status === "completed").map((i) => i.key));
+  const updatedInits = tickInitiatives({ ...state, datasets: driftedDs }, tick);
+  const completedNow = updatedInits.filter((i) => i.status === "completed" && !prevKeys.has(i.key)).map((i) => i.key);
+
+  // 5. Tick stakeholders
+  const updatedStakeholders = tickStakeholders({ ...state, datasets: driftedDs, pressures: state.pressures, initiatives: updatedInits });
+
+  // 6. Pressure lifecycle
+  const tickedPressures = tickPressureLifecycle(state.pressures, tick);
+
+  // 7. Generate causal pressures
+  const stateForCausal: GameState = { ...state, tick, datasets: driftedDs, pressures: tickedPressures, stakeholders: updatedStakeholders, initiatives: updatedInits, cycleCapacity };
+  const newPressures = generateCausalPressures(stateForCausal);
+  const updatedCooldowns = { ...state.pressureCooldowns };
+  for (const p of newPressures) updatedCooldowns[p.type] = tick;
   const allPressures = [...tickedPressures, ...newPressures];
 
-  // 7. Medallion pipeline (Phase 5)
-  //    a. Quality drift degrades data each tick
-  const driftedDatasets = applyQualityDrift(allDatasets, updatedCatalogue, allSilos);
-  //    b. Auto-fix attempts repair on eligible datasets
-  const { datasets: fixedDatasets, events: fixEvents } = runAutoFix(
-    driftedDatasets,
-    updatedCatalogue,
-    allSilos,
-    nextTick
-  );
-  //    c. Promote Bronze → Silver → Gold where conditions are met
-  const {
-    datasets: promotedDatasets,
-    catalogue: promotedCatalogue,
-    events: promoteEvents,
-  } = promoteDatasets(fixedDatasets, updatedCatalogue, nextTick);
+  // 8. Trust + maturity
+  const trustScore = computeTrust({ ...stateForCausal, pressures: allPressures });
+  const maturityResult = computeMaturity({ ...stateForCausal, pressures: allPressures, initiatives: updatedInits });
+  const executiveSatisfaction = Math.round(updatedStakeholders.reduce((s, k) => s + k.patience, 0) / (updatedStakeholders.length || 1));
 
-  const tickHealingEvents = [...fixEvents, ...promoteEvents];
-  const allHealingEvents = [
-    ...tickHealingEvents,
-    ...state.healingEvents,
-  ].slice(0, MAX_HEALING_HISTORY);
+  // 9. Narrative + delayed
+  const narrativeEvents = makeNarrativeEvents(newPressures, completedNow, tick);
+  const delayedResult   = processDelayed({ ...stateForCausal, pressures: allPressures, stakeholders: updatedStakeholders }, tick);
 
-  // 8. Trust score
-  const siloTrustDelta     = computeSiloTrustDelta(allSilos);
-  const govTrustDelta      = computeGovernanceTrustDelta(promotedCatalogue);
-  const incidentTrustDelta = computeIncidentTrustDelta(allIncidents);
-  const qualityTrustDelta  = computeQualityTrustDelta(promotedDatasets);
-  const trustScore = state.trustScore + 1
-    + siloTrustDelta + govTrustDelta + incidentTrustDelta + qualityTrustDelta;
-
-  // 9. Reputation
-  const reputationDelta = incRepDelta + execRepDelta;
-  const reputationDrift = trustScore > state.trustScore ? 0.5 : -0.5;
-  const reputation = Math.max(
-    0,
-    Math.min(100, state.reputation + reputationDelta + reputationDrift)
-  );
-
-  // 10. Session tracking (Phase 6)
-  const peakTrustScore = Math.max(state.peakTrustScore, trustScore);
-  const gamePhase = trustScore < -20 ? ("ended" as const) : state.gamePhase;
-
-  // 11. Character events
-  const stateForChar: GameState = {
-    ...state,
-    datasets: promotedDatasets,
-    catalogue: promotedCatalogue,
-  };
-  const charEvent = generateCharacterEvent(stateForChar);
-  const characterEvents = charEvent
-    ? [charEvent, ...state.characterEvents].slice(0, 30)
-    : state.characterEvents;
-
-  // 12. Key person departures
-  let updatedPersons = [...state.persons];
-  const extraCharEvents: string[] = [];
-
-  // Process anyone departing this tick — clear assignments, mark inactive
-  const leavingNow = updatedPersons.filter((p) => p.departsAtTick === nextTick);
-  let catalogueAfterDepartures = { ...promotedCatalogue };
-  for (const person of leavingNow) {
-    const field =
-      person.roleType === "owner" ? "ownerId" :
-      person.roleType === "steward" ? "stewardId" : "custodianId";
-    for (const [id, entry] of Object.entries(catalogueAfterDepartures)) {
-      if (entry[field] === person.id) {
-        catalogueAfterDepartures[id] = { ...entry, [field]: undefined };
-      }
-    }
-    extraCharEvents.push(
-      `⚠ ${person.name} has left the organisation. Their datasets are now unassigned.`
-    );
-  }
-  updatedPersons = updatedPersons.map((p) =>
-    p.departsAtTick === nextTick
-      ? { ...p, active: false, departsAtTick: undefined, returnsAtTick: nextTick + 10 }
-      : p
-  );
-
-  // Return anyone who was on leave
-  updatedPersons = updatedPersons.map((p) =>
-    p.active === false && p.returnsAtTick === nextTick
-      ? { ...p, active: true, returnsAtTick: undefined }
-      : p
-  );
-
-  // Randomly schedule a new departure — probability is trait-dependent
-  const activePersons    = updatedPersons.filter((p) => p.active !== false && !p.departsAtTick);
-  const alreadyDeparting = updatedPersons.some((p) => !!p.departsAtTick);
-  if (!alreadyDeparting && activePersons.length > 2) {
-    for (const candidate of activePersons) {
-      const chance = TRAIT_DEPARTURE_CHANCE[candidate.trait ?? "methodical"] ?? 0.04;
-      if (Math.random() < chance) {
-        updatedPersons = updatedPersons.map((p) =>
-          p.id === candidate.id ? { ...p, departsAtTick: nextTick + 3 } : p
-        );
-        extraCharEvents.push(
-          `🔔 ${candidate.name} (${candidate.roleType}) has announced they will leave in 3 ticks.`
-        );
-        break;
-      }
-    }
-  }
-
-  // 13. Data breach + unclassified sensitive data incidents
-  const securityIncidents: Incident[] = [];
-  for (const entry of Object.values(catalogueAfterDepartures)) {
-    const ds = promotedDatasets.find((d) => d.id === entry.datasetId);
-    if (!ds) continue;
-
-    // Breach: confidential/restricted + high governance risk + no custodian
-    if (
-      (entry.classification === "confidential" || entry.classification === "restricted") &&
-      entry.governanceRisk > 75 &&
-      !entry.custodianId
-    ) {
-      const alreadyBreach = allIncidents.some(
-        (i) => i.type === "data_breach" && i.affectedDatasetIds.includes(ds.id) && i.status !== "resolved"
-      );
-      if (!alreadyBreach) {
-        securityIncidents.push({
-          id: `breach-${ds.id}-${nextTick}`,
-          type: "data_breach",
-          severity: "critical",
-          affectedDatasetIds: [ds.id],
-          source: "governance",
-          status: "open",
-          timeToResolve: 5,
-          createdAtTick: nextTick,
-        });
-        extraCharEvents.push(
-          `🚨 DATA BREACH risk on ${entry.name} — ${entry.classification} data, unprotected.`
-        );
-      }
-    }
-
-    // Unclassified for > 5 ticks: flag it
-    const createdAt = entry.createdAtTick ?? 0;
-    if (!entry.classification && nextTick - createdAt > 5) {
-      const alreadyFlagged = allIncidents.some(
-        (i) => i.type === "unclassified_sensitive_data" &&
-                i.affectedDatasetIds.includes(ds.id) &&
-                i.status !== "resolved"
-      );
-      if (!alreadyFlagged && Math.random() < 0.15) {
-        securityIncidents.push({
-          id: `unclassified-${ds.id}-${nextTick}`,
-          type: "unclassified_sensitive_data",
-          severity: "medium",
-          affectedDatasetIds: [ds.id],
-          source: "governance",
-          status: "open",
-          timeToResolve: 4,
-          createdAtTick: nextTick,
-        });
-      }
-    }
-  }
-  const allIncidentsWithSecurity = [...allIncidents, ...securityIncidents];
-
-  // 14. Compliance audits
-  let nextAuditTick = state.nextAuditTick;
-  let auditsPassed  = state.auditsPassed;
-  let auditsFailed  = state.auditsFailed;
-  const auditPressures: ExecutivePressure[] = [];
-  const auditIncidents: Incident[] = [];
-
-  // Warn 8 ticks before audit
-  if (nextTick === nextAuditTick - 8) {
-    auditPressures.push({
-      id: `audit-warning-${nextTick}`,
-      type: "compliance_audit",
-      demand: `Compliance audit in 8 ticks. Ensure ≥1 Gold dataset, ≤3 open incidents, and ≤30% ungoverned datasets.`,
-      urgency: "high",
-      requiredDatasetDomains: [],
-      timeLimit: 8,
-      status: "pending",
-    });
-  }
-
-  // Audit day
-  if (nextTick === nextAuditTick) {
-    const goldCount    = promotedDatasets.filter((d) => d.layer === "gold").length;
-    const openInc      = allIncidentsWithSecurity.filter((i) => i.status === "open" || i.status === "in_progress").length;
-    const totalDs      = Object.keys(catalogueAfterDepartures).length;
-    const ungoverned   = Object.values(catalogueAfterDepartures).filter((e) => !e.ownerId).length;
-    const ungovernedPct = totalDs > 0 ? ungoverned / totalDs : 1;
-    const avgQuality   = promotedDatasets.length > 0
-      ? promotedDatasets.reduce((s, d) => s + compositeQuality(d.quality), 0) / promotedDatasets.length
-      : 0;
-
-    const passed = goldCount >= 1 && openInc <= 3 && ungovernedPct <= 0.3 && avgQuality >= 55;
-
-    if (passed) {
-      auditsPassed += 1;
-      extraCharEvents.push(`✅ Compliance audit PASSED. Trust +15, Reputation +8.`);
-      nextAuditTick += 25;
-    } else {
-      auditsFailed += 1;
-      const reasons: string[] = [];
-      if (goldCount < 1)        reasons.push("no Gold datasets");
-      if (openInc > 3)          reasons.push(`${openInc} open incidents`);
-      if (ungovernedPct > 0.3)  reasons.push(`${Math.round(ungovernedPct * 100)}% ungoverned`);
-      if (avgQuality < 55)      reasons.push(`avg quality ${Math.round(avgQuality)}`);
-      extraCharEvents.push(`❌ Compliance audit FAILED: ${reasons.join(", ")}. Trust -15.`);
-      auditIncidents.push({
-        id: `audit-fail-${nextTick}`,
-        type: "compliance_audit_failed",
-        severity: "critical",
-        affectedDatasetIds: [],
-        source: "governance",
-        status: "open",
-        timeToResolve: 6,
-        createdAtTick: nextTick,
-      });
-      nextAuditTick += 20;
-    }
-
-    // Resolve the audit warning pressure if still pending
-    const finalAllPressures = [...allPressures, ...auditPressures].map((p) =>
-      p.type === "compliance_audit" && p.status === "pending" && p.id.startsWith("audit-warning")
-        ? { ...p, status: "completed" as const }
-        : p
-    );
-    allPressures.splice(0, allPressures.length, ...finalAllPressures);
-
-    // Apply trust delta for audit result
-    const auditTrustDelta = passed ? 15 : -15;
-    const auditRepDelta   = passed ? 8  : -5;
-    const finalTrust      = trustScore + auditTrustDelta;
-    const finalRep        = Math.max(0, Math.min(100, reputation + auditRepDelta));
-    const finalPeakTrust  = Math.max(peakTrustScore, finalTrust);
-
-    const allFinalIncidents = [...allIncidentsWithSecurity, ...auditIncidents];
-    const allFinalCharEvents = [
-      ...extraCharEvents,
-      ...characterEvents,
-    ].slice(0, 30);
-
-    return {
-      tick: nextTick,
-      persons: updatedPersons,
-      datasets: promotedDatasets,
-      silos: allSilos,
-      signals: allSignals,
-      catalogue: catalogueAfterDepartures,
-      incidents: allFinalIncidents,
-      executivePressures: [...allPressures, ...auditPressures],
-      healingEvents: allHealingEvents,
-      trustScore: finalTrust,
-      reputation: finalRep,
-      peakTrustScore: finalPeakTrust,
-      gamePhase,
-      characterEvents: allFinalCharEvents,
-      nextAuditTick,
-      auditsPassed,
-      auditsFailed,
-    };
-  }
-
-  // Standard return (non-audit tick)
-  const allFinalIncidentsStandard = [...allIncidentsWithSecurity];
-  const allFinalCharEvents = [...extraCharEvents, ...characterEvents].slice(0, 30);
+  const nextLog = [...narrativeEvents, ...delayedResult.narrativeLog].slice(0, 200);
 
   return {
-    tick: nextTick,
-    persons: updatedPersons,
-    datasets: promotedDatasets,
-    silos: allSilos,
-    signals: allSignals,
-    catalogue: catalogueAfterDepartures,
-    incidents: allFinalIncidentsStandard,
-    executivePressures: [...allPressures, ...auditPressures],
-    healingEvents: allHealingEvents,
-    trustScore,
-    reputation,
-    peakTrustScore,
-    gamePhase,
-    characterEvents: allFinalCharEvents,
-    nextAuditTick,
-    auditsPassed,
-    auditsFailed,
+    tick,
+    datasets: driftedDs,
+    initiatives: updatedInits,
+    stakeholders: delayedResult.stakeholders,
+    pressures: allPressures,
+    pressureCooldowns: updatedCooldowns,
+    cycleCapacity,
+    trustScore: delayedResult.trustScore,
+    maturityStage: maturityResult.stage,
+    executiveSatisfaction,
+    narrativeLog: nextLog,
+    delayedEffects: delayedResult.delayedEffects,
+    peakTrustScore: Math.max(state.peakTrustScore, trustScore),
   };
 }

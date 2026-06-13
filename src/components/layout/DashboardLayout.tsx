@@ -1,174 +1,73 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { playSound, setMuted, getMuted } from "../../engine/soundEngine";
 import { useGameStore } from "../../state/store";
 import { DatasetCatalogue } from "../catalogue/DatasetCatalogue";
+import { DomainView } from "../domain/DomainView";
+import { PressureQueue } from "../pressure/PressureQueue";
 import { GovernancePanel } from "../governance/GovernancePanel";
-import { BottomFeed } from "../feed/BottomFeed";
+import { InitiativesPanel } from "../initiatives/InitiativesPanel";
+import { StoryFeed } from "../story/StoryFeed";
 import { EndScreen } from "../endgame/EndScreen";
-import { ToastStack, showToast } from "../ui/ToastStack";
-import { PriorityQueue } from "../ui/PriorityQueue";
-import { OrgMapPanel } from "../orgmap/OrgMapPanel";
+import { ToastStack } from "../ui/ToastStack";
+import { setMuted, getMuted } from "../../engine/soundEngine";
+import { MATURITY_LABELS, MATURITY_COLORS } from "../../engine/maturityEngine";
 import { computeFinalScore } from "../../engine/scoringEngine";
-
-// ── Shared visual tokens ─────────────────────────────────────────────────────
 
 const FONT = "'Courier New', Courier, monospace";
 
 const styles = {
-  root: {
-    display: "flex",
-    flexDirection: "column" as const,
-    height: "100vh",
-    background: "#0a0a0a",
-    color: "#c0c0c0",
-    fontFamily: FONT,
-    fontSize: "13px",
-    position: "relative" as const,
-  },
-  topBar: {
-    display: "flex",
-    alignItems: "center",
-    gap: "20px",
-    padding: "0 20px",
-    height: "44px",
-    background: "#070707",
-    borderBottom: "1px solid #161616",
-    flexShrink: 0,
-  },
-  title: {
-    fontSize: "11px",
-    fontWeight: "bold" as const,
-    color: "#00ff88",
-    letterSpacing: "0.1em",
-    textTransform: "uppercase" as const,
-    flex: 1,
-  },
-  panels: {
-    display: "flex",
-    flex: 1,
-    overflow: "hidden",
-  },
-  leftPanel: {
-    width: "280px",
-    flexShrink: 0,
-    borderRight: "1px solid #161616",
-    display: "flex",
-    flexDirection: "column" as const,
-    overflow: "hidden",
-  },
-  centerPanel: {
-    flex: 1,
-    overflow: "hidden",
-    display: "flex",
-    flexDirection: "column" as const,
-    minWidth: 0,
-  },
-  rightPanel: {
-    width: "264px",
-    flexShrink: 0,
-    borderLeft: "1px solid #161616",
-    display: "flex",
-    flexDirection: "column" as const,
-    overflow: "hidden",
-  },
-  bottomZone: {
-    height: "216px",
-    flexShrink: 0,
-    borderTop: "1px solid #161616",
-    background: "#080808",
-    overflow: "hidden",
-  },
-  bottomBar: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "10px",
-    padding: "8px 20px",
-    background: "#070707",
-    borderTop: "1px solid #161616",
-    flexShrink: 0,
-  },
-  panelHeader: {
-    fontSize: "9px",
-    color: "#383838",
-    textTransform: "uppercase" as const,
-    letterSpacing: "0.14em",
-    borderBottom: "1px solid #141414",
-    padding: "7px 10px",
-    flexShrink: 0,
-  },
-  divider: { borderTop: "1px solid #141414", flexShrink: 0 },
+  root: { display: "flex", flexDirection: "column" as const, height: "100vh", background: "#0a0a0a", color: "#c0c0c0", fontFamily: FONT, fontSize: "13px", position: "relative" as const },
+  topBar: { display: "flex", alignItems: "center", gap: "18px", padding: "0 18px", height: "44px", background: "#070707", borderBottom: "1px solid #161616", flexShrink: 0 },
+  panels: { display: "flex", flex: 1, overflow: "hidden" },
+  leftPanel: { width: "264px", flexShrink: 0, borderRight: "1px solid #161616", display: "flex", flexDirection: "column" as const, overflow: "hidden" },
+  centreLeft: { flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" as const, minWidth: 0, borderRight: "1px solid #161616" },
+  centreRight: { width: "280px", flexShrink: 0, borderRight: "1px solid #161616", display: "flex", flexDirection: "column" as const, overflow: "hidden" },
+  rightPanel: { width: "260px", flexShrink: 0, display: "flex", flexDirection: "column" as const, overflow: "hidden" },
+  bottomZone: { height: "176px", flexShrink: 0, borderTop: "1px solid #161616", background: "#080808", overflow: "hidden" },
+  bottomBar: { display: "flex", alignItems: "center", gap: "10px", padding: "8px 18px", background: "#070707", borderTop: "1px solid #161616", flexShrink: 0 },
+  panelHeader: { fontSize: "9px", color: "#6e6e6e", textTransform: "uppercase" as const, letterSpacing: "0.14em", borderBottom: "1px solid #141414", padding: "7px 10px", flexShrink: 0 },
 };
 
-// ── Stat badge in top bar ────────────────────────────────────────────────────
-
-function StatBadge({
-  label, value, color, blink = false, animKey,
-}: {
-  label: string;
-  value: string | number;
-  color: string;
-  blink?: boolean;
-  animKey?: string | number;
-}) {
+function StatBadge({ label, value, color, animKey }: { label: string; value: string | number; color: string; animKey?: string | number }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-      <span style={{
-        fontSize: "8px",
-        color: "#383838",
-        textTransform: "uppercase" as const,
-        letterSpacing: "0.12em",
-      }}>
-        {label}
-      </span>
-      <span
-        key={animKey}
-        className={[
-          blink ? "anim-urgent-blink" : "",
-          animKey !== undefined ? "anim-num-pop" : "",
-        ].join(" ").trim()}
-        style={{ fontSize: "16px", fontWeight: "bold", color, lineHeight: 1.2 }}
-      >
-        {value}
-      </span>
+      <span style={{ fontSize: "8px", color: "#6e6e6e", textTransform: "uppercase", letterSpacing: "0.1em" }}>{label}</span>
+      <span key={animKey} className={animKey !== undefined ? "anim-num-pop" : ""} style={{ fontSize: "16px", fontWeight: "bold", color, lineHeight: 1.2 }}>{value}</span>
     </div>
   );
 }
 
-// ── Separator ────────────────────────────────────────────────────────────────
-
 function Sep() {
-  return (
-    <div style={{ width: "1px", height: "24px", background: "#181818", flexShrink: 0 }} />
-  );
+  return <div style={{ width: "1px", height: "24px", background: "#181818", flexShrink: 0 }} />;
 }
-
-// ── Main layout ──────────────────────────────────────────────────────────────
 
 export function DashboardLayout() {
   const tick               = useGameStore((s) => s.tick);
   const trustScore         = useGameStore((s) => s.trustScore);
-  const reputation         = useGameStore((s) => s.reputation);
-  const incidents          = useGameStore((s) => s.incidents);
-  const executivePressures = useGameStore((s) => s.executivePressures);
+  const maturityStage      = useGameStore((s) => s.maturityStage);
+  const executiveSatis     = useGameStore((s) => s.executiveSatisfaction);
+  const cycleCapacity      = useGameStore((s) => s.cycleCapacity);
   const gamePhase          = useGameStore((s) => s.gamePhase);
-  const characterEvents    = useGameStore((s) => s.characterEvents);
-  const endSession         = useGameStore((s) => s.endSession);
+  const pressures          = useGameStore((s) => s.pressures);
+  const fullState          = useGameStore((s) => s);
   const storeRunTick       = useGameStore((s) => s.runTick);
+  const endSession         = useGameStore((s) => s.endSession);
 
-  // Live overall score
-  const fullState  = useGameStore((s) => s);
-  const liveScore  = computeFinalScore(fullState).overallScore;
+  const liveScore      = computeFinalScore(fullState).overallScore;
+  const mColor         = MATURITY_COLORS[maturityStage];
+  const mLabel         = MATURITY_LABELS[maturityStage];
+  const openPressures  = pressures.filter((p) => p.status === "open").length;
+  const available      = cycleCapacity.total - cycleCapacity.used;
+  const trustColor     = trustScore > 50 ? "#00ff88" : trustScore > 25 ? "#ffa500" : "#ff4444";
+  const scoreColor     = liveScore >= 70 ? "#00ff88" : liveScore >= 50 ? "#ffa500" : "#ff4444";
+  const capColor       = available > 0 ? "#c0c0c0" : "#ff4444";
 
-  // ── Real-time game loop ─────────────────────────────────────────────────────
-  const [isRunning, setIsRunning]   = useState(false);
-  const [speed, setSpeed]           = useState<1 | 2 | 3>(1);
-  const [sfxOff, setSfxOff]         = useState(getMuted());
+  const [isRunning, setIsRunning] = useState(false);
+  const [speed, setSpeed] = useState<1 | 2 | 3>(1);
+  const [sfxOff, setSfxOff] = useState(getMuted());
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const SPEED_MS: Record<number, number> = { 1: 2200, 2: 1200, 3: 600 };
 
-  const runTick = useCallback(() => {
-    storeRunTick();
-  }, [storeRunTick]);
+  const runTick = useCallback(() => { storeRunTick(); }, [storeRunTick]);
 
   useEffect(() => {
     if (!isRunning || gamePhase === "ended") return;
@@ -176,264 +75,140 @@ export function DashboardLayout() {
     return () => clearInterval(id);
   }, [isRunning, speed, gamePhase, runTick]);
 
-  // Auto-pause on game end
+  useEffect(() => { if (gamePhase === "ended") setIsRunning(false); }, [gamePhase]);
+
+  const prevPressureCount = useRef(0);
   useEffect(() => {
-    if (gamePhase === "ended") setIsRunning(false);
-  }, [gamePhase]);
-
-  // ── Character event toasts + event-driven sounds ───────────────────────────
-  const prevEventRef = useRef<string>("");
-  useEffect(() => {
-    const latest = characterEvents[0];
-    if (latest && latest !== prevEventRef.current) {
-      prevEventRef.current = latest;
-      showToast(latest, "info");
-      if (latest.includes("leaving in"))      playSound("person_departing");
-      else if (latest.includes("has left"))   playSound("person_departing");
-      else if (latest.includes("BREACH"))     playSound("breach");
-      else if (latest.includes("audit PASSED")) playSound("audit_pass");
-      else if (latest.includes("audit FAILED")) playSound("audit_fail");
-    }
-  }, [characterEvents]);
-
-  // ── Tick sound ──────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (tick > 0 && isRunning) playSound("tick");
-  }, [tick]);
-
-  // ── Incident spawn sound ────────────────────────────────────────────────────
-  const prevIncCountRef = useRef(0);
-  useEffect(() => {
-    const open = incidents.filter((i) => i.status === "open").length;
-    if (open > prevIncCountRef.current) {
-      const newest = incidents.find((i) => i.status === "open");
-      if (newest?.severity === "critical") playSound("incident_critical");
-      else                                 playSound("incident_medium");
-    }
-    prevIncCountRef.current = open;
-  }, [incidents]);
-
-  // Reputation trend — compare across renders
-  const prevRepRef   = useRef<number>(reputation);
-  const [repTrend, setRepTrend] = useState<"up" | "down" | "flat">("flat");
-  useEffect(() => {
-    if (reputation > prevRepRef.current) setRepTrend("up");
-    else if (reputation < prevRepRef.current) setRepTrend("down");
-    prevRepRef.current = reputation;
-  }, [reputation]);
-
-  const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
-
-  // Derived counts (only what the top bar still needs)
-  const activeIncidents = incidents.filter((i) => i.status === "open" || i.status === "in_progress").length;
-  const activePressures = executivePressures.filter((p) => p.status === "pending").length;
-
-  const criticalIncident = incidents.some(
-    (i) => (i.status === "open" || i.status === "in_progress") && i.severity === "critical"
-  );
-  const urgentPressure = executivePressures.some(
-    (p) => p.status === "pending" && (p.urgency === "critical" || p.urgency === "high")
-  );
-
-  // Colour helpers
-  const trustColor =
-    trustScore > 40 ? "#00ff88" : trustScore > 10 ? "#ffa500" : "#ff4444";
-  const repColor =
-    Math.round(reputation) > 50 ? "#00bfff" :
-    Math.round(reputation) > 25 ? "#ffa500" : "#ff4444";
-  const scoreColor =
-    liveScore >= 72 ? "#00ff88" : liveScore >= 50 ? "#ffa500" : "#ff4444";
-  const repDisplay = `${Math.round(reputation)}${repTrend === "up" ? " ↑" : repTrend === "down" ? " ↓" : ""}`;
-
-  // Very subtle screen glow when there are urgent executive demands
-  const glowStyle = urgentPressure
-    ? { boxShadow: "inset 0 0 80px rgba(255, 102, 0, 0.035)" }
-    : {};
+    const open = pressures.filter((p) => p.status === "open").length;
+    prevPressureCount.current = open;
+  }, [pressures]);
 
   return (
-    <div style={{ ...styles.root, ...glowStyle }}>
+    <div style={styles.root}>
       {gamePhase === "ended" && <EndScreen />}
       <ToastStack />
 
-      {/* ── Top Bar ── */}
+      {/* ── Top bar ── */}
       <div style={styles.topBar}>
-        <div style={styles.title}>⬡ Medallion Protocol</div>
-        <StatBadge label="Score"      value={liveScore}    color={scoreColor} />
+        <div style={{ fontSize: "11px", fontWeight: "bold", color: "#00ff88", letterSpacing: "0.1em", textTransform: "uppercase", flex: 1 }}>
+          ⬡ Medallion Protocol
+        </div>
+        <StatBadge label="Score"    value={liveScore}      color={scoreColor} />
         <Sep />
-        <StatBadge label="Tick"       value={tick}         color="#555"      animKey={tick} />
-        <StatBadge label="Trust"      value={trustScore}   color={trustColor} animKey={`t${tick}`} />
-        <StatBadge label="Reputation" value={repDisplay}   color={repColor} />
+        <StatBadge label="Tick"     value={tick}           color="#555" animKey={tick} />
+        <StatBadge label="Trust"    value={trustScore}     color={trustColor} animKey={`t${tick}`} />
+        <StatBadge label="Maturity" value={mLabel}         color={mColor} />
         <Sep />
-        <StatBadge label="Incidents"  value={activeIncidents} color={activeIncidents > 0 ? "#ff4444" : "#1e1e1e"} blink={criticalIncident} />
-        <StatBadge label="Pressure"   value={activePressures} color={activePressures > 0 ? "#ff6600" : "#1e1e1e"} blink={urgentPressure} />
+        <StatBadge label="Exec Sat" value={executiveSatis} color={executiveSatis > 60 ? "#00ff88" : executiveSatis > 40 ? "#ffa500" : "#ff4444"} />
+        <StatBadge label="Pressures" value={openPressures} color={openPressures > 0 ? "#ff4444" : "#1e1e1e"} />
+        <Sep />
+        <StatBadge label="Capacity" value={`${available}/${cycleCapacity.total}`} color={capColor} />
       </div>
 
       {/* ── Main panels ── */}
       <div style={styles.panels}>
-        {/* Left: Catalogue */}
+
+        {/* Left: Domain overview + Catalogue */}
         <div style={styles.leftPanel}>
-          <div style={styles.panelHeader}>Dataset Catalogue</div>
-          <div style={{ flex: 1, overflow: "hidden", padding: "6px 8px" }}>
-            <DatasetCatalogue selectedId={selectedDatasetId} onSelect={setSelectedDatasetId} />
+          <div style={{ flex: "0 0 auto", maxHeight: "55%", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+            <DomainView selectedId={selectedId} onSelect={setSelectedId} />
+          </div>
+          <div style={{ flex: 1, overflow: "hidden", borderTop: "1px solid #141414", display: "flex", flexDirection: "column" }}>
+            <div style={styles.panelHeader}>Dataset Catalogue</div>
+            <div style={{ flex: 1, overflow: "hidden", padding: "6px 8px" }}>
+              <DatasetCatalogue selectedId={selectedId} onSelect={setSelectedId} />
+            </div>
           </div>
         </div>
 
-        {/* Center: Priority triage + Org Map */}
-        <div style={styles.centerPanel}>
-          <PriorityQueue />
-          <OrgMapPanel />
+        {/* Centre-left: Pressure queue */}
+        <div style={styles.centreLeft}>
+          <PressureQueue />
         </div>
 
-        {/* Right: Dataset Inspector */}
+        {/* Centre-right: Initiatives */}
+        <div style={styles.centreRight}>
+          <InitiativesPanel />
+        </div>
+
+        {/* Right: Dataset inspector + governance */}
         <div style={styles.rightPanel}>
-          {/* Dataset inspector (governance + quality) */}
-          <div style={{
-            ...styles.panelHeader,
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}>
-            <span>
-              {selectedDatasetId ? "👥 Dataset Inspector" : "👥 Governance"}
-            </span>
-            {selectedDatasetId && (
-              <button
-                onClick={() => setSelectedDatasetId(null)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "#2a2a2a",
-                  cursor: "pointer",
-                  fontSize: "9px",
-                  fontFamily: FONT,
-                  padding: 0,
-                }}
-              >
+          <div style={{ ...styles.panelHeader, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span>{selectedId ? "Dataset Inspector" : "Governance"}</span>
+            {selectedId && (
+              <button onClick={() => setSelectedId(null)} style={{ background: "none", border: "none", color: "#585858", cursor: "pointer", fontSize: "9px", fontFamily: FONT }}>
                 ✕
               </button>
             )}
           </div>
-          <div style={{ flex: 1, overflowY: "auto", padding: "8px" }}>
-            <GovernancePanel selectedDatasetId={selectedDatasetId} />
+          <div style={{ flex: 1, overflowY: "auto" }}>
+            <GovernancePanel selectedId={selectedId} />
           </div>
         </div>
       </div>
 
-      {/* ── Bottom feed (tabbed) ── */}
+      {/* ── Bottom: Story feed ── */}
       <div style={styles.bottomZone}>
-        <BottomFeed />
+        <StoryFeed />
       </div>
 
-      {/* ── Bottom bar: game controls ── */}
+      {/* ── Bottom bar: controls ── */}
       <div style={styles.bottomBar}>
-        {/* Play / Pause */}
         <button
           onClick={() => setIsRunning((r) => !r)}
-          className={isRunning ? "" : ""}
           style={{
             background: isRunning ? "#1a0808" : "#001a0d",
             border: `1px solid ${isRunning ? "#ff444455" : "#00ff8855"}`,
             color: isRunning ? "#ff4444" : "#00ff88",
-            fontFamily: FONT,
-            fontSize: "13px",
-            fontWeight: "bold",
-            padding: "6px 22px",
-            borderRadius: "3px",
-            cursor: "pointer",
-            letterSpacing: "0.07em",
-            minWidth: "110px",
+            fontFamily: FONT, fontSize: "13px", fontWeight: "bold",
+            padding: "6px 22px", borderRadius: "3px", cursor: "pointer",
+            letterSpacing: "0.07em", minWidth: "110px",
           }}
         >
           {isRunning ? "⏸ PAUSE" : "▶ PLAY"}
         </button>
 
-        {/* Speed selector */}
         <div style={{ display: "flex", gap: "2px" }}>
           {([1, 2, 3] as const).map((s) => (
-            <button
-              key={s}
-              onClick={() => setSpeed(s)}
-              style={{
-                background: speed === s ? "#1a1a0a" : "transparent",
-                border: `1px solid ${speed === s ? "#ffd70055" : "#1e1e1e"}`,
-                color: speed === s ? "#ffd700" : "#2a2a2a",
-                fontFamily: FONT,
-                fontSize: "10px",
-                padding: "5px 10px",
-                borderRadius: "2px",
-                cursor: "pointer",
-                letterSpacing: "0.04em",
-              }}
-            >
-              {s}×
-            </button>
+            <button key={s} onClick={() => setSpeed(s)} style={{
+              background: speed === s ? "#1a1a0a" : "transparent",
+              border: `1px solid ${speed === s ? "#ffd70055" : "#1e1e1e"}`,
+              color: speed === s ? "#ffd700" : "#2a2a2a",
+              fontFamily: FONT, fontSize: "10px", padding: "5px 10px", borderRadius: "2px", cursor: "pointer",
+            }}>{s}×</button>
           ))}
         </div>
 
-        {/* Manual step when paused */}
         {!isRunning && (
-          <button
-            onClick={runTick}
-            style={{
-              background: "transparent",
-              border: "1px solid #2a2a2a",
-              color: "#444",
-              fontFamily: FONT,
-              fontSize: "10px",
-              padding: "5px 14px",
-              borderRadius: "2px",
-              cursor: "pointer",
-              letterSpacing: "0.06em",
-            }}
-          >
+          <button onClick={runTick} style={{
+            background: "transparent", border: "1px solid #1e1e1e", color: "#333",
+            fontFamily: FONT, fontSize: "10px", padding: "5px 14px", borderRadius: "2px", cursor: "pointer",
+          }}>
             +1 Tick
           </button>
         )}
 
         <div style={{ flex: 1 }} />
 
-        {/* Live score */}
-        <span style={{ fontSize: "10px", color: scoreColor, fontFamily: FONT, letterSpacing: "0.06em" }}>
-          Score {liveScore}
-        </span>
+        <span style={{ fontSize: "10px", color: scoreColor, fontFamily: FONT, letterSpacing: "0.06em" }}>Score {liveScore}</span>
 
-        {/* SFX toggle */}
         <button
-          onClick={() => {
-            const next = !sfxOff;
-            setSfxOff(next);
-            setMuted(next);
-            if (!next) playSound("toast_success");
-          }}
+          onClick={() => { const n = !sfxOff; setSfxOff(n); setMuted(n); }}
           style={{
-            background: "transparent",
-            border: "1px solid #1a1a1a",
+            background: "transparent", border: "1px solid #1a1a1a",
             color: sfxOff ? "#1e1e1e" : "#2a2a2a",
-            fontFamily: FONT,
-            fontSize: "10px",
-            padding: "5px 12px",
-            borderRadius: "2px",
-            cursor: "pointer",
-            letterSpacing: "0.06em",
+            fontFamily: FONT, fontSize: "10px", padding: "5px 12px", borderRadius: "2px", cursor: "pointer",
           }}
         >
           {sfxOff ? "SFX OFF" : "SFX ON"}
         </button>
 
-        {/* End session */}
         <button
           onClick={endSession}
           style={{
-            background: "transparent",
-            border: "1px solid #1a1a1a",
-            color: "#222",
-            fontFamily: FONT,
-            fontSize: "10px",
-            padding: "5px 14px",
-            borderRadius: "2px",
-            cursor: "pointer",
-            letterSpacing: "0.07em",
-            textTransform: "uppercase" as const,
+            background: "transparent", border: "1px solid #1a1a1a", color: "#222",
+            fontFamily: FONT, fontSize: "10px", padding: "5px 14px", borderRadius: "2px",
+            cursor: "pointer", textTransform: "uppercase",
           }}
           onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#444"; }}
           onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "#222"; }}

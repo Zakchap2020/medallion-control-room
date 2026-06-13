@@ -1,256 +1,144 @@
 import { useState } from "react";
 import { useGameStore } from "../../state/store";
-import { compositeQuality } from "../../engine/medallionEngine";
-import type { Dataset } from "../../models/types";
+import { FIXED_DATASETS, DATASET_BY_ID } from "../../data/datasets";
+import { compositeQuality, qualityColor, layerForState } from "../../engine/qualityUtils";
 
-type CatalogueFilter = "all" | "at_risk" | "ungoverned" | "gold";
+const FONT = "'Courier New', Courier, monospace";
 
-const DEPT_COLORS: Record<string, string> = {
-  Finance:    "#ffd700",
-  Sales:      "#00bfff",
-  Marketing:  "#ff69b4",
-  HR:         "#98fb98",
-  Operations: "#ffa500",
+type Filter = "all" | "at_risk" | "ungoverned" | "gold" | "critical";
+
+const DOMAIN_COLORS: Record<string, string> = {
+  Finance: "#ffd700", Sales: "#00bfff", Marketing: "#ff69b4",
+  HR: "#98fb98", Operations: "#ffa500",
 };
 
-const LAYER_STYLE: Record<string, { color: string; label: string }> = {
-  bronze: { color: "#7a4a1e", label: "BRZ" },
-  silver: { color: "#666",    label: "SLV" },
-  gold:   { color: "#c8a800", label: "GLD" },
+const LAYER_COLORS: Record<string, string> = {
+  bronze: "#7a4a1e", silver: "#888", gold: "#ffd700",
 };
-
-function qualityColor(q: number): string {
-  if (q < 35) return "#ff4444";
-  if (q < 60) return "#ffa500";
-  return "#00ff88";
-}
-
-function rowTint(ds: Dataset, risk: number, isSelected: boolean, cq: number): string {
-  if (ds.layer === "gold")   return isSelected ? "#1c1800" : "#14100000";
-  if (cq < 35)               return isSelected ? "#1a0000" : "#ff444406";
-  if (risk > 65)             return isSelected ? "#1a0800" : "#ff660405";
-  if (isSelected)            return "#141414";
-  return "#0e0e0e";
-}
 
 interface Props {
   selectedId: string | null;
   onSelect: (id: string) => void;
 }
 
-function RoleDot({ filled, label }: { filled: boolean; label: string }) {
-  return (
-    <span
-      title={`${label}: ${filled ? "assigned" : "unassigned"}`}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        width: "14px",
-        height: "14px",
-        borderRadius: "2px",
-        background: filled ? "#003818" : "transparent",
-        border: `1px solid ${filled ? "#00ff8840" : "#1e1e1e"}`,
-        fontSize: "7px",
-        color: filled ? "#00ff88" : "#333",
-        fontFamily: "'Courier New', monospace",
-      }}
-    >
-      {label[0]}
-    </span>
-  );
-}
-
-function LayerBadge({ ds }: { ds: Dataset }) {
-  const ls = LAYER_STYLE[ds.layer];
-  return (
-    <span style={{
-      fontSize: "8px",
-      color: ls.color,
-      border: `1px solid ${ls.color}44`,
-      borderRadius: "2px",
-      padding: "1px 4px",
-      letterSpacing: "0.04em",
-      flexShrink: 0,
-    }}>
-      {ls.label}
-    </span>
-  );
-}
-
-const FILTER_LABELS: Record<CatalogueFilter, string> = {
-  all: "All",
-  at_risk: "At Risk",
-  ungoverned: "Ungoverned",
-  gold: "Gold",
-};
-
 export function DatasetCatalogue({ selectedId, onSelect }: Props) {
-  const datasets  = useGameStore((s) => s.datasets);
-  const catalogue = useGameStore((s) => s.catalogue);
-  const [filter, setFilter] = useState<CatalogueFilter>("all");
+  const datasets = useGameStore((s) => s.datasets);
+  const [filter, setFilter] = useState<Filter>("all");
 
-  const bronze = datasets.filter((d) => d.layer === "bronze").length;
-  const silver = datasets.filter((d) => d.layer === "silver").length;
-  const gold   = datasets.filter((d) => d.layer === "gold").length;
-
-  const filtered = [...datasets].filter((ds) => {
-    const entry = catalogue[ds.id];
-    const cq    = compositeQuality(ds.quality);
-    const risk  = entry?.governanceRisk ?? 0;
-    if (filter === "at_risk")    return cq < 60 || risk > 65;
-    if (filter === "ungoverned") return !entry?.ownerId;
-    if (filter === "gold")       return ds.layer === "gold";
-    return true;
+  const filtered = FIXED_DATASETS.filter((fd) => {
+    const ds = datasets[fd.id];
+    if (!ds) return false;
+    const cq = compositeQuality(ds.quality);
+    const layer = layerForState(ds);
+    switch (filter) {
+      case "at_risk":    return cq < 55;
+      case "ungoverned": return !ds.ownerId && !ds.stewardId;
+      case "gold":       return layer === "gold";
+      case "critical":   return fd.criticality >= 4;
+      default:           return true;
+    }
   });
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "3px", height: "100%", overflow: "hidden" }}>
-      {/* Summary line */}
-      <div style={{
-        display: "flex",
-        gap: "8px",
-        fontSize: "9px",
-        color: "#2a2a2a",
-        marginBottom: "3px",
-        flexShrink: 0,
-      }}>
-        <span>{datasets.length} datasets</span>
-        {gold   > 0 && <span style={{ color: "#a08800" }}>{gold}G</span>}
-        {silver > 0 && <span style={{ color: "#555"   }}>{silver}S</span>}
-        {bronze > 0 && <span style={{ color: "#4a2a0e" }}>{bronze}B</span>}
-      </div>
-
-      {/* Filter buttons */}
-      <div style={{ display: "flex", gap: "2px", flexShrink: 0, marginBottom: "4px" }}>
-        {(["all", "at_risk", "ungoverned", "gold"] as CatalogueFilter[]).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            style={{
-              flex: 1,
-              background: filter === f ? "#1a1a1a" : "transparent",
-              border: `1px solid ${filter === f ? "#2a2a2a" : "#141414"}`,
-              color: filter === f
-                ? (f === "at_risk" ? "#ff6600" : f === "ungoverned" ? "#ff4444" : f === "gold" ? "#c8a800" : "#c0c0c0")
-                : "#2a2a2a",
-              fontFamily: "'Courier New', Courier, monospace",
-              fontSize: "8px",
-              padding: "3px 0",
-              borderRadius: "2px",
-              cursor: "pointer",
-              letterSpacing: "0.04em",
-              textTransform: "uppercase",
-            }}
-          >
-            {FILTER_LABELS[f]}
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+      {/* Filters */}
+      <div style={{ display: "flex", gap: "3px", flexWrap: "wrap", marginBottom: "8px", flexShrink: 0 }}>
+        {(["all", "critical", "at_risk", "ungoverned", "gold"] as Filter[]).map((f) => (
+          <button key={f} onClick={() => setFilter(f)} style={{
+            background:    filter === f ? "#1a1a1a" : "transparent",
+            border:        `1px solid ${filter === f ? "#2a2a2a" : "#141414"}`,
+            color:         filter === f ? "#c0c0c0" : "#6e6e6e",
+            fontFamily:    FONT,
+            fontSize:      "8px",
+            padding:       "3px 7px",
+            borderRadius:  "2px",
+            cursor:        "pointer",
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+          }}>
+            {f === "at_risk" ? "At Risk" : f.charAt(0).toUpperCase() + f.slice(1)}
           </button>
         ))}
       </div>
 
-      {datasets.length === 0 && (
-        <div style={{ color: "#222", fontStyle: "italic", fontSize: "11px", paddingTop: "12px" }}>
-          No datasets. Run a tick.
-        </div>
-      )}
-
-      {filtered.length === 0 && datasets.length > 0 && (
-        <div style={{ color: "#1e1e1e", fontSize: "10px", paddingTop: "8px", textAlign: "center" }}>
-          No {FILTER_LABELS[filter].toLowerCase()} datasets
-        </div>
-      )}
-
+      {/* List */}
       <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "3px" }}>
-      {[...filtered].reverse().map((ds) => {
-        const entry      = catalogue[ds.id];
-        const isSelected = selectedId === ds.id;
-        const risk       = entry?.governanceRisk ?? 0;
-        const cq         = Math.round(compositeQuality(ds.quality));
-        const isDrifting = ds.quality.consistency < 45;
-        const bg         = rowTint(ds, risk, isSelected, cq);
+        {filtered.map((fd) => {
+          const ds = datasets[fd.id];
+          if (!ds) return null;
+          const cq = compositeQuality(ds.quality);
+          const qColor = qualityColor(cq);
+          const layer = layerForState(ds);
+          const isSelected = fd.id === selectedId;
+          const dColor = DOMAIN_COLORS[fd.domain] ?? "#555";
+          const critColor = fd.criticality >= 5 ? "#ff4444" : fd.criticality >= 4 ? "#ff6600" : "#585858";
 
-        return (
-          <div
-            key={ds.id}
-            onClick={() => onSelect(ds.id)}
-            className="anim-row-appear"
-            style={{
-              background: bg,
-              border: `1px solid ${isSelected ? "#2a2a2a" : "#141414"}`,
-              borderLeft: `3px solid ${DEPT_COLORS[ds.department] ?? "#333"}`,
-              borderRadius: "2px",
-              padding: "5px 7px",
-              cursor: "pointer",
-              userSelect: "none",
-            }}
-          >
-            {/* Row 1: name + layer badge */}
-            <div style={{ display: "flex", alignItems: "center", gap: "5px", marginBottom: "3px" }}>
-              <span style={{
-                fontFamily: "monospace",
-                color: "#c8c8c8",
-                fontSize: "10px",
-                flex: 1,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}>
-                {ds.name}
-              </span>
-              <LayerBadge ds={ds} />
-            </div>
-
-            {/* Row 2: dept + quality score + warnings + role dots */}
-            <div style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "9px" }}>
-              <span style={{ color: DEPT_COLORS[ds.department], minWidth: "52px" }}>
-                {ds.department}
-              </span>
-
-              <span style={{ color: qualityColor(cq), fontFamily: "monospace" }}>
-                {cq}
-              </span>
-
-              {isDrifting && (
-                <span style={{ color: "#cc6600" }} title="Schema drift">⚡</span>
-              )}
-
-              {ds.autoFixEnabled && (
-                <span style={{ color: "#00ff8830", fontSize: "8px" }} title="Auto-Fix enabled">AF</span>
-              )}
-
-              {/* Role dots */}
-              <div style={{ marginLeft: "auto", display: "flex", gap: "2px" }}>
-                {entry && (
-                  <>
-                    <RoleDot filled={!!entry.ownerId}     label="Owner" />
-                    <RoleDot filled={!!entry.stewardId}   label="Steward" />
-                    <RoleDot filled={!!entry.custodianId} label="Custodian" />
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Row 3: quality mini-bar */}
-            <div style={{
-              height: "2px",
-              background: "#111",
-              borderRadius: "1px",
-              marginTop: "4px",
-              overflow: "hidden",
+          return (
+            <button key={fd.id} onClick={() => onSelect(fd.id)} style={{
+              background:    isSelected ? "#121212" : "#0a0a0a",
+              border:        `1px solid ${isSelected ? "#404040" : "#1a1a1a"}`,
+              borderLeft:    `2px solid ${dColor}`,
+              borderRadius:  "2px",
+              padding:       "7px 8px",
+              cursor:        "pointer",
+              textAlign:     "left",
+              width:         "100%",
             }}>
-              <div style={{
-                height: "100%",
-                width: `${cq}%`,
-                background: qualityColor(cq),
-                borderRadius: "1px",
-                transition: "width 0.4s ease",
-                opacity: 0.7,
-              }} />
-            </div>
+              {/* Name + layer + score */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                <span style={{ fontSize: "9px", color: isSelected ? "#c0c0c0" : "#888", fontFamily: FONT, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, marginRight: "6px" }}>
+                  {fd.name}
+                </span>
+                <div style={{ display: "flex", gap: "4px", alignItems: "center", flexShrink: 0 }}>
+                  <span style={{ fontSize: "7px", color: LAYER_COLORS[layer], fontFamily: FONT, textTransform: "uppercase" }}>
+                    {layer}
+                  </span>
+                  <span style={{ fontSize: "10px", fontWeight: "bold", color: qColor, fontFamily: FONT }}>{cq}</span>
+                </div>
+              </div>
+
+              {/* Quality bar */}
+              <div style={{ height: "2px", background: "#0f0f0f", borderRadius: "1px", marginBottom: "5px" }}>
+                <div style={{ height: "100%", width: `${cq}%`, background: qColor, opacity: 0.65, borderRadius: "1px", transition: "width 0.3s" }} />
+              </div>
+
+              {/* Domain + role badges */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "7px", color: "#585858", fontFamily: FONT }}>
+                  {fd.domain} · {fd.usageCount} users
+                </span>
+                <div style={{ display: "flex", gap: "2px", alignItems: "center" }}>
+                  {(["O", "S", "T"] as const).map((lbl, i) => {
+                    const filled = i === 0 ? !!ds.ownerId : i === 1 ? !!ds.stewardId : !!(ds.custodianId || ds.engineerId);
+                    return (
+                      <span key={lbl} style={{
+                        fontSize: "7px", fontFamily: FONT,
+                        color: filled ? "#00ff88" : "#3d3d3d",
+                        border: `1px solid ${filled ? "#00ff8833" : "#111"}`,
+                        borderRadius: "2px", padding: "0 2px",
+                      }}>
+                        {lbl}
+                      </span>
+                    );
+                  })}
+                  <span style={{ fontSize: "7px", color: critColor, fontFamily: FONT, marginLeft: "2px" }}>
+                    {"★".repeat(fd.criticality)}
+                  </span>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+
+        {filtered.length === 0 && (
+          <div style={{ fontSize: "9px", color: "#484848", fontFamily: FONT, textAlign: "center", padding: "24px 0" }}>
+            No datasets match this filter.
           </div>
-        );
-      })}
+        )}
       </div>
     </div>
   );
 }
+
+// re-export so import paths that used the old type still get something useful
+export { DATASET_BY_ID };

@@ -1,190 +1,119 @@
-import type { GameState, FinalScore, EndgameArchetype, Achievement } from "../models/types";
-import { compositeQuality } from "./medallionEngine";
+import type { GameState, EndState } from "../models/types";
+import { computeMaturity } from "./maturityEngine";
+import { compositeQuality } from "./qualityUtils";
+import { FIXED_DATASETS } from "../data/datasets";
 
-// ── Sub-score computers ───────────────────────────────────────────────────────
-
-function computeDataTrustScore(state: GameState): number {
-  const gold = state.datasets.filter((d) => d.layer === "gold");
-  const goldQuality =
-    gold.length > 0
-      ? gold.reduce((sum, d) => sum + compositeQuality(d.quality), 0) / gold.length
-      : 0;
-
-  const totalInc = state.incidents.length;
-  const failedInc = state.incidents.filter((i) => i.status === "failed").length;
-  const incidentHealth = totalInc > 0 ? (1 - failedInc / totalInc) * 100 : 75;
-
-  const totalSig = state.signals.length;
-  const resolvedSig = state.signals.filter((s) => s.resolved).length;
-  const signalResolution = totalSig > 0 ? (resolvedSig / totalSig) * 100 : 60;
-
-  const total = state.datasets.length;
-  const advanced = state.datasets.filter((d) => d.layer !== "bronze").length;
-  const pipelineRatio = total > 0 ? (advanced / total) * 100 : 0;
-
-  return Math.round(
-    goldQuality    * 0.40 +
-    incidentHealth * 0.30 +
-    signalResolution * 0.15 +
-    pipelineRatio  * 0.15
-  );
+export interface FinalScore {
+  overallScore:          number;
+  endState:              EndState;
+  endStateLabel:         string;
+  endStateDescription:   string;
+  breakdown: {
+    trust:            number;
+    maturity:         number;
+    governance:       number;
+    pressureHandling: number;
+    stakeholders:     number;
+    initiatives:      number;
+  };
+  verdict: string;
 }
-
-function computeGovernanceMaturityScore(state: GameState): number {
-  const entries = Object.values(state.catalogue);
-  const total = entries.length;
-  if (total === 0) return 0;
-
-  const withOwner    = entries.filter((e) => e.ownerId).length;
-  const withSteward  = entries.filter((e) => e.stewardId).length;
-  const withCustodian = entries.filter((e) => e.custodianId).length;
-  const avgCoverage  = (withOwner + withSteward + withCustodian) / (total * 3);
-
-  const discoveredSilos = state.silos.filter((s) => s.discovered).length;
-  const containedSilos  = state.silos.filter((s) => s.contained).length;
-  const siloHealth = discoveredSilos > 0 ? (containedSilos / discoveredSilos) * 100 : 100;
-
-  const avgGovRisk =
-    entries.reduce((sum, e) => sum + e.governanceRisk, 0) / entries.length;
-  const riskScore = Math.max(0, 100 - avgGovRisk);
-
-  return Math.round(avgCoverage * 100 * 0.50 + siloHealth * 0.30 + riskScore * 0.20);
-}
-
-function computeOperationalStabilityScore(state: GameState): number {
-  const totalInc  = state.incidents.length;
-  const failedInc = state.incidents.filter((i) => i.status === "failed").length;
-  const incidentScore = totalInc > 0 ? (1 - failedInc / totalInc) * 100 : 80;
-
-  const heal = state.healingEvents;
-  const healSuccess = heal.filter((e) => e.success).length;
-  const autoFixScore = heal.length > 0 ? (healSuccess / heal.length) * 100 : 60;
-
-  const totalSig   = state.signals.length;
-  const resolvedSig = state.signals.filter((s) => s.resolved).length;
-  const noiseScore = totalSig > 0 ? (resolvedSig / totalSig) * 100 : 60;
-
-  return Math.round(incidentScore * 0.40 + autoFixScore * 0.30 + noiseScore * 0.30);
-}
-
-function computeExecutiveSatisfactionScore(state: GameState): number {
-  const pressures = state.executivePressures;
-  const total = pressures.length;
-  if (total === 0) return 65;
-
-  const completed = pressures.filter((p) => p.status === "completed").length;
-  const failed    = pressures.filter((p) => p.status === "failed").length;
-
-  const completionScore  = (completed / total) * 100;
-  const reliabilityScore = ((total - failed) / total) * 100;
-
-  return Math.round(completionScore * 0.60 + reliabilityScore * 0.40);
-}
-
-// ── Public API ────────────────────────────────────────────────────────────────
 
 export function computeFinalScore(state: GameState): FinalScore {
-  const dataTrustScore             = computeDataTrustScore(state);
-  const governanceMaturityScore    = computeGovernanceMaturityScore(state);
-  const operationalStabilityScore  = computeOperationalStabilityScore(state);
-  const executiveSatisfactionScore = computeExecutiveSatisfactionScore(state);
+  const maturityResult = computeMaturity(state);
+  const { trustScore, stakeholders, pressures, initiatives } = state;
 
-  const overallScore = Math.round(
-    dataTrustScore             * 0.30 +
-    governanceMaturityScore    * 0.30 +
-    operationalStabilityScore  * 0.25 +
-    executiveSatisfactionScore * 0.15
-  );
+  const avgPatience = stakeholders.length > 0
+    ? stakeholders.reduce((s, k) => s + k.patience, 0) / stakeholders.length
+    : 50;
+
+  const resolved = pressures.filter((p) => p.status === "resolved").length;
+  const closed   = pressures.filter((p) => p.status !== "open").length;
+  const pressureScore = closed > 0 ? (resolved / closed) * 100 : 100;
+
+  const completedInitiatives = initiatives.filter((i) => i.status === "completed").length;
+  const initiativeScore = (completedInitiatives / 8) * 100;
+
+  const gov = maturityResult.breakdown;
+  const govScore = gov.ownership * 0.4 + gov.stewardship * 0.35 + gov.technicalControl * 0.25;
+
+  const breakdown = {
+    trust:            Math.round(trustScore * 0.25),
+    maturity:         Math.round(maturityResult.score * 0.25),
+    governance:       Math.round(govScore * 0.20),
+    pressureHandling: Math.round(pressureScore * 0.15),
+    stakeholders:     Math.round(avgPatience * 0.10),
+    initiatives:      Math.round(initiativeScore * 0.05),
+  };
+
+  const overallScore = Object.values(breakdown).reduce((a, b) => a + b, 0);
+  const endState = determineEndState(state, maturityResult.score, avgPatience, gov);
+  const copy = END_STATE_COPY[endState];
 
   return {
-    dataTrustScore,
-    governanceMaturityScore,
-    operationalStabilityScore,
-    executiveSatisfactionScore,
     overallScore,
+    endState,
+    endStateLabel: copy.label,
+    endStateDescription: copy.description,
+    breakdown,
+    verdict: copy.verdict(overallScore),
   };
 }
 
-export function classifyEndgame(
+function determineEndState(
   state: GameState,
-  score: FinalScore
-): EndgameArchetype {
-  const {
-    dataTrustScore,
-    governanceMaturityScore,
-    operationalStabilityScore,
-    executiveSatisfactionScore,
-    overallScore,
-  } = score;
+  maturityScore: number,
+  avgPatience: number,
+  breakdown: { ownership: number; technicalControl: number }
+): EndState {
+  const { initiatives, pressures } = state;
+  const completedCount = initiatives.filter((i) => i.status === "completed").length;
+  const expiredCount = pressures.filter((p) => p.status === "expired").length;
+  const shadowExpired = pressures.filter((p) => p.type === "shadow_data_risk" && p.status === "expired").length;
 
-  const total      = state.datasets.length;
-  const autoFixN   = state.datasets.filter((d) => d.autoFixEnabled).length;
-  const autoFixRatio = total > 0 ? autoFixN / total : 0;
-  const entries    = Object.values(state.catalogue);
-  const fullyGov   = entries.filter((e) => e.ownerId && e.stewardId && e.custodianId).length;
-  const govCoverage = entries.length > 0 ? fullyGov / entries.length : 0;
-
-  if (overallScore >= 72) return "mature_data_driven";
-
-  if (dataTrustScore >= 65 && executiveSatisfactionScore < 35)
-    return "technically_stable_politically_fragile";
-
-  if (governanceMaturityScore < 30 || dataTrustScore < 25) return "governance_failure";
-
-  if (autoFixRatio > 0.70 && govCoverage < 0.30 && operationalStabilityScore >= 50)
-    return "self_healing_illusion";
-
-  return "operationally_chaotic";
+  if (completedCount >= 7 && avgPatience < 50) return "over_governed";
+  if (expiredCount >= 4 || shadowExpired >= 2) return "shadow_dominated";
+  if (maturityScore >= 70 && avgPatience >= 60) return "data_driven";
+  if (maturityScore >= 45 && avgPatience < 40) return "politically_fractured";
+  if (breakdown.technicalControl >= 75 && breakdown.ownership < 40) return "technically_stable";
+  if (maturityScore >= 50) return "data_driven";
+  if (maturityScore >= 30) return "politically_fractured";
+  return "shadow_dominated";
 }
 
-export function computeAchievements(state: GameState): Achievement[] {
-  const entries  = Object.values(state.catalogue);
-  const total    = state.datasets.length;
-  const autoFixN = state.datasets.filter((d) => d.autoFixEnabled).length;
-  const fullyGov = entries.filter((e) => e.ownerId && e.stewardId && e.custodianId).length;
-  const discovered = state.silos.filter((s) => s.discovered).length;
-  const uncontained = state.silos.filter((s) => s.discovered && !s.contained).length;
-
-  return [
-    {
-      id: "first_gold",
-      label: "First Gold Dataset",
-      description: "Promoted at least one dataset to the Gold layer.",
-      unlocked: state.datasets.some((d) => d.layer === "gold"),
-    },
-    {
-      id: "full_governance",
-      label: "Full Governance Coverage",
-      description: "Owner, Steward, and Custodian assigned to every catalogued dataset.",
-      unlocked: entries.length > 0 && fullyGov === entries.length,
-    },
-    {
-      id: "silo_hunter",
-      label: "Zero Shadow Silos",
-      description: "All discovered silos have been contained.",
-      unlocked: discovered > 0 && uncontained === 0,
-    },
-    {
-      id: "exec_confidence",
-      label: "Executive Confidence",
-      description: "Completed 3 or more executive pressure requests.",
-      unlocked: state.executivePressures.filter((p) => p.status === "completed").length >= 3,
-    },
-    {
-      id: "resilient_platform",
-      label: "Resilient Platform",
-      description: "Reached tick 20 with a positive trust score.",
-      unlocked: state.tick >= 20 && state.trustScore > 0,
-    },
-    {
-      id: "silent_risk",
-      label: "Silent Risk Warning",
-      description:
-        "Over 70% of datasets rely on Auto-Fix with less than 30% full governance — a fragile foundation.",
-      unlocked:
-        total > 2 &&
-        autoFixN / total > 0.70 &&
-        (entries.length === 0 || fullyGov / entries.length < 0.30),
-    },
-  ];
+export function avgCompositeQuality(state: GameState): number {
+  const all = FIXED_DATASETS;
+  if (all.length === 0) return 0;
+  const empty = { completeness: 0, accuracy: 0, consistency: 0, timeliness: 0, validity: 0 };
+  return Math.round(
+    all.reduce((s, d) => s + compositeQuality(state.datasets[d.id]?.quality ?? empty), 0) / all.length
+  );
 }
+
+const END_STATE_COPY: Record<EndState, { label: string; description: string; verdict: (score: number) => string }> = {
+  data_driven: {
+    label: "Data-Driven Organisation",
+    description: "Mature, distributed data governance achieved. Stakeholders trust the data. Decisions come from a single version of truth.",
+    verdict: (s) => `You transformed a broken data estate into a governed, trusted organisation. Score: ${s}.`,
+  },
+  politically_fractured: {
+    label: "Politically Fractured",
+    description: "Governance frameworks exist but political will does not. Stakeholders are pursuing their own data strategies.",
+    verdict: (s) => `Governance was built but stakeholder alignment was lost. Score: ${s}. The frameworks are real — but without buy-in, they will not hold.`,
+  },
+  technically_stable: {
+    label: "Technically Stable, Business-Misaligned",
+    description: "Strong technical infrastructure, missing business ownership. Engineers keep the lights on but no one owns the truth.",
+    verdict: (s) => `Strong technical execution, insufficient business engagement. Score: ${s}. Data quality holds but the business doesn't own it.`,
+  },
+  shadow_dominated: {
+    label: "Shadow-Data Dominated",
+    description: "Spreadsheets and exports are more trusted than governed systems. The governed estate lost the war for truth.",
+    verdict: (s) => `Shadow data won. Score: ${s}. Informal data filled the governance gap. Authority has collapsed.`,
+  },
+  over_governed: {
+    label: "Over-Governed Bureaucracy",
+    description: "Governance processes are comprehensive but suffocating. Every policy written — but the business moved on.",
+    verdict: (s) => `Perfect governance, wrong priorities. Score: ${s}. The frameworks are admirable. The organisation doesn't know what to do with them.`,
+  },
+};

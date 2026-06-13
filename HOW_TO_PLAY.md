@@ -1,311 +1,310 @@
-# Medallion Data Governance Control Room Simulator
+# Medallion Protocol
 ## How to Play
 
 ---
 
 ## What Is This?
 
-You are the Head of Data Governance at a mid-sized enterprise. Your job is to transform a chaotic landscape of ungoverned, siloed, low-quality data assets into a trusted, well-governed data platform — before the organisation loses confidence in its data entirely.
+You are the newly appointed **Head of Data Governance** at a mid-sized enterprise. The organisation's data is a mess — ungoverned, siloed, low-quality, and politically charged. Executives are losing patience. Auditors are circling. The board wants answers.
 
-The game is built around **DMBOK** (the Data Management Body of Knowledge), the industry standard framework for data governance. Every mechanic in the game reflects a real concept from that framework.
+Your job is to transform this chaos into a governed, trusted data platform before the organisation fractures under its own dysfunction.
+
+This is not a dashboard simulator. Every pressure you face has a real cause. Every decision you make has consequences — some immediate, some delayed, some political.
+
+---
+
+## Before You Start — Choose a Governance Model
+
+At the beginning of each session you must commit to one of three governance operating models. This is your most important decision.
+
+| Model | Capacity per Cycle | Tradeoff |
+|---|---|---|
+| **Centralised** | 4 | Tight control, slower throughput. Good if you want to focus governance on critical datasets. |
+| **Federated** | 6 | More capacity, but distributed — harder to coordinate across domains. Good for breadth. |
+| **Platform-led** | 3 → 8 | Starts slow, scales up after platform modernisation. High risk early, high reward late. |
+
+**Capacity** is how many governance actions you can take each 15-tick cycle. Once it runs out, you cannot assign roles, resolve pressures, or launch initiatives until the next cycle begins. Choose carefully.
 
 ---
 
 ## The Goal
 
-Keep your **Trust Score** above **-20** while building governance maturity over time.
+Build **organisational data maturity** while keeping **executive patience** high enough to survive.
 
-Your session is scored across four dimensions when you click **End Session**:
+Your session ends with one of five outcomes:
 
-| Dimension | Weight | What it measures |
-|---|---|---|
-| Data Trust | 30% | Your trust score trajectory and peak |
-| Governance Maturity | 30% | How well your datasets are owned, stewarded, and classified |
-| Operational Stability | 25% | Incident rate and resolution speed |
-| Executive Satisfaction | 15% | Executive pressures completed vs. failed |
+| End State | What Got You Here |
+|---|---|
+| **Data-Driven** | Maturity ≥ 70, executives mostly satisfied. |
+| **Technically Stable** | Good pipelines and quality, but business stakeholders were ignored. |
+| **Politically Fractured** | Reasonable maturity, but patience collapsed — governance without buy-in. |
+| **Shadow-Dominated** | Too many pressures left to expire. Shadow data and workarounds filled the gap. |
+| **Over-Governed** | You launched nearly every initiative but burnt out executive patience in the process. |
 
-Scores above 72 are excellent. Below 50 is a governance failure.
+There is no single right answer. Each outcome reflects a different kind of organisational failure — or success.
 
 ---
 
 ## The Game Loop
 
-**Ticks** are the unit of time. Each tick, the game engine runs: datasets drift, incidents spawn, pressures escalate, silos grow.
+**Ticks** are the unit of time. Every tick the engine runs: datasets drift in quality, stakeholder patience decays, pressures emerge, initiatives advance.
 
 Use the controls at the bottom of the screen:
 
 - **▶ PLAY** — starts the real-time loop
-- **⏸ PAUSE** — pauses it
-- **1× / 2× / 3×** — controls tick speed (slow = more time to react, fast = higher pressure)
-- **+1 Tick** — available when paused; manually advance one tick at a time
-- **End Session** — triggers scoring and shows your final results
-
-The game ends automatically if your Trust Score drops below **-20**.
+- **⏸ PAUSE** — stops it; use this to think and act
+- **1× / 2× / 3×** — tick speed (start at 1× until you're comfortable)
+- **+1 Tick** — advance one tick manually when paused
+- **End Session** — trigger final scoring at any point
 
 ---
 
-## The Medallion Pipeline
+## Datasets
 
-All data moves through three tiers. Promotion is the primary way to gain trust.
+The game contains **15 fixed enterprise datasets** spread across five business domains. They never change — every organisation has these assets. What changes is their quality and governance state.
+
+**Domains and datasets:**
+
+| Domain | Datasets |
+|---|---|
+| Finance | General Ledger, Revenue Forecast, Board KPI Pack, Regulatory Filing |
+| Sales | Customer Master, CRM Pipeline, Customer Support Tickets |
+| Marketing | Campaign Attribution, Marketing Spend, Digital Analytics |
+| HR | Employee Master, Payroll, Headcount Report |
+| Operations | Vendor Contracts, Supply Chain Feed |
+
+### Quality Dimensions
+
+Each dataset has five quality dimensions (DMBOK standard):
+
+| Dimension | Degrades when... |
+|---|---|
+| **Completeness** | No engineer assigned; pipeline gaps go unattended |
+| **Accuracy** | No owner to enforce definitions; upstream data is wrong |
+| **Consistency** | No steward managing rules; schema drift accumulates |
+| **Timeliness** | Dataset sits ungoverned for extended periods |
+| **Validity** | No custodian; access controls fail; bad records enter |
+
+**Composite Quality** is the average of all five. It drives your Trust Score and determines whether a dataset reaches Silver or Gold tier.
+
+### Medallion Tiers
+
+Tiers are computed automatically — you don't promote manually.
 
 ```
 Bronze  →  Silver  →  Gold
-(raw)     (refined)   (trusted)
 ```
 
-### Bronze
-- All new datasets start here
-- High governance risk, quality is unstable
-- Eligible for promotion to Silver when: **composite quality > 65** AND a **Custodian** is assigned
-
-### Silver
-- Refined data with active stewardship
-- Eligible for promotion to Gold when: **composite quality > 80** AND both an **Owner** AND **Steward** are assigned
-
-### Gold
-- Fully trusted, governed datasets
-- Passive trust boost each tick
-- Required to pass Compliance Audits
-
-You can **manually promote** a dataset using the **Promote →** button in the Dataset Inspector (right panel). The button shows why promotion is blocked when conditions aren't met.
-
----
-
-## Data Quality Dimensions
-
-Every dataset has five quality dimensions, drawn from DMBOK:
-
-| Dimension | What decays when... |
+| Tier | Conditions |
 |---|---|
-| **Accuracy** | No Data Owner assigned |
-| **Completeness** | No Custodian assigned; pipeline breaks |
-| **Consistency** | Schema drift; no Steward managing rules |
-| **Uniqueness** | Duplicate data signals go unresolved |
-| **Timeliness** | Datasets sit unattended for many ticks |
+| **Bronze** | Default starting state |
+| **Silver** | Composite quality ≥ 60 AND a Data Owner assigned |
+| **Gold** | Composite quality ≥ 80 AND both Owner AND Steward assigned |
 
-**Composite Quality** is the average of all five. It's shown on every dataset card in the catalogue.
-
-Enable **Auto-Fix** on a dataset to allow the system to attempt automatic repairs each tick — but Auto-Fix is less effective than resolving the root cause.
+Gold datasets generate passive trust each tick and are required to pass compliance audits.
 
 ---
 
 ## Governance Roles
 
-Three roles can be assigned to each dataset. Each person can only hold a given role on **one dataset at a time** — this is scarcity, and it forces real prioritisation decisions.
+Each dataset can have up to four roles assigned. Role assignments cost **1 capacity** each.
 
-### Data Owner
-> *Accountable for business definition, policy compliance, and correct usage.*
+| Role | What they do |
+|---|---|
+| **Data Owner** | Domain leader. Accountable for policy, usage, and escalations. Slows quality decay significantly. |
+| **Data Steward** | Embedded domain expert. Enforces quality standards and resolves definition conflicts. |
+| **Data Custodian** | Controls access. Reduces governance risk on sensitive datasets. |
+| **Data Engineer** | Maintains pipelines. Prevents timeliness and validity decay. |
 
-- Without one: accuracy decays, governance risk climbs each tick
-- Required for Silver → Gold promotion
+**Domain alignment matters.** Each staff member belongs to a domain (Finance, Sales, HR, etc.). You have 17 people in total across 4 role types. Prioritise coverage on your highest-criticality datasets first.
 
-### Data Steward
-> *Enforces quality standards and business rules.*
+### Quality Drift
 
-- Without one: consistency decays, auto-fix is less effective
-- Required for Silver → Gold promotion
+Every tick, every dataset drifts downward unless it is governed:
 
-### Data Custodian
-> *Manages technical pipelines, schema, and access controls.*
+- Fully governed dataset (Owner + Steward + tech role) → quality **slowly improves**
+- Partially governed → drift is reduced but not eliminated
+- Ungoverned → rapid decay, increasing governance risk each tick
 
-- Without one: completeness decays, pipeline breaks go unpatched
-- Required for Bronze → Silver promotion
-
-### Scarcity
-You have **2 Owners, 2 Stewards, 2 Custodians** — six people total. Assigning someone to a new dataset unassigns them from their previous one. When someone is reassigned, you'll see a warning toast.
-
-### Key Person Departures
-Occasionally (~4% chance per tick), a governance person will announce they are leaving in **3 ticks**. Their upcoming departure is flagged in the dropdown with `⚠ leaving in NT`. When they leave:
-- All their dataset assignments are **automatically cleared**
-- They go on leave for **10 ticks** then return
-- You must reassign their datasets manually before the 3 ticks expire or face governance risk spikes
+Critical datasets (★★★★★) drift faster. They are your most urgent priority.
 
 ---
 
-## Data Classification
+## Capacity — The Core Constraint
 
-Every dataset should be classified. Select a classification in the Dataset Inspector:
+**Cycle capacity** refreshes every 15 ticks. Once used up, you cannot act until the next cycle.
 
-| Classification | Meaning | Risk if mismanaged |
+Actions that cost capacity:
+
+| Action | Cost |
+|---|---|
+| Assign a governance role | 1 cap |
+| Resolve a business pressure (varies) | 0 – 3 cap |
+| Launch a strategic initiative | 1 – 3 cap |
+
+Every cycle you must decide: assign roles to ungoverned datasets, or resolve active pressures, or invest in an initiative. You rarely have enough to do all three.
+
+**Platform-led governance model** can increase capacity permanently after the Platform Modernisation initiative completes.
+
+---
+
+## Business Pressures
+
+Pressures are not random events — every one has a **cause chain** you can trace. They appear in the Pressures panel when governance gaps trigger real organisational consequences.
+
+### Pressure Types
+
+| Type | Typical Cause |
+|---|---|
+| **Governance Gap** | Critical dataset has no owner for too long |
+| **KPI Conflict** | Revenue Forecast and General Ledger disagree (accuracy < 60 on both) |
+| **Shadow Data Risk** | General Ledger quality too low — teams build their own spreadsheets |
+| **Compliance Risk** | Restricted dataset has no custodian assigned |
+| **Audit Demand** | Scheduled compliance audit has arrived |
+| **Dependency Cascade** | Upstream dataset quality failing; downstream datasets break |
+| **Stakeholder Frustration** | An executive's patience has dropped below 30 |
+| **Executive Escalation** | Executive pressure reaching critical — direct intervention required |
+| **Data Quality Failure** | Composite quality critically low on a key dataset |
+
+### Resolving Pressures
+
+Each pressure has **2–3 resolution options**, each with a capacity cost and different effects:
+
+- Some options are quick fixes (low cost, modest effect)
+- Some invest in the relationship (patience boost to a specific stakeholder)
+- Some reduce risk structurally (data quality boost, governance risk reduction)
+- Some unlock an initiative you couldn't launch before
+
+Pressures that **expire unresolved** mark your record as shadow-dominated. Too many expired pressures push you toward a bad end state.
+
+**Urgency matters.** Critical pressures decay stakeholder patience faster while open. Resolve critical pressures within 2–3 cycles or they escalate.
+
+---
+
+## Stakeholders
+
+Seven executives are watching you. You cannot control them — only manage their expectations.
+
+| Executive | Domain | What frustrates them |
 |---|---|---|
-| **Public** | Freely shareable | Low — no restrictions |
-| **Internal** | Internal use only | Medium — exposure risk |
-| **Confidential** | Restricted access | High — breach risk |
-| **Restricted** | Highest protection | Critical — breach is automatic if ungoverned |
+| **Richard Holden** | CFO | Financial data quality failures, audit risk |
+| **Samira Patel** | CRO | CRM and Customer data problems |
+| **Diana Osei** | CMO | Campaign attribution conflicts, marketing data chaos |
+| **William Asante** | CHRO | HR data governance failures, payroll anomalies |
+| **Marcus Webb** | COO | Supply chain and vendor data breakdowns |
+| **Victor Ashby** | Board | Compliance exposure, regulatory filing quality |
+| **Catherine Lim** | CEO | Systemic failures, cross-domain conflicts |
 
-**Unclassified datasets older than 5 ticks** will periodically generate **Unclassified Sensitive Data** incidents (medium severity).
+**Patience** decays every tick. It decays faster when a pressure originating from that stakeholder is open. If patience reaches 0, they escalate — generating a new critical pressure and damaging your trust score.
 
-**Confidential or Restricted datasets** with governance risk above 75% and no Custodian assigned will trigger a **Data Breach** — a critical incident with significant trust damage.
-
-> DMBOK principle: classification is not optional. Every dataset that touches business-critical or personal data must be classified and protected.
-
----
-
-## Analysts
-
-Analysts are assigned to **departments** (Finance, Sales, Marketing, HR, Operations). They:
-- Detect data quality signals in their assigned department
-- Discover hidden data silos
-- Accelerate incident resolution
-
-Assign analysts from the right panel. An analyst without a department assignment is idle.
+Certain resolution options and the **Executive Data Literacy** initiative slow patience decay.
 
 ---
 
-## Data Silos
+## Strategic Initiatives
 
-Silos are undiscovered datasets living outside the governed catalogue — often in spreadsheets, shadow systems, or departmental databases.
+Initiatives are multi-cycle investments that change the rules of the game. They consume capacity upfront and per cycle until completion.
 
-- Analysts discover silos over time (based on their assigned department)
-- Discovered silos appear in the **Silo Monitor** (centre panel)
-- Silos have a **Risk Level** (0–100%). High-risk silos drain your Trust Score each tick
-- Click **Contain** to eliminate a silo's risk and gain a trust bonus
-- Uncontained critical silos (>75% risk) blink and apply ongoing trust damage
+| Initiative | Cycles | Effect |
+|---|---|---|
+| **MDM Programme** | 4 | Sets quality floor of 60 on Customer Master and Employee Master |
+| **Governance Council** | 2 | Reduces new governance gap pressures by 30% |
+| **Audit Preparation** | 1 | Reduces regulatory filing risk 40%; trust boost on completion |
+| **Data Catalogue** | 2 | Reduces governance risk on all datasets; enables Platform Modernisation |
+| **Platform Modernisation** | 5 | Quality floor 40 across all datasets; +2 capacity per cycle. Requires: Data Catalogue |
+| **Privacy Programme** | 2 | Reduces governance risk on restricted datasets by 35% |
+| **Executive Data Literacy** | 1 | Reduces stakeholder patience decay rate by 40% |
+| **Self-Service Analytics** | 3 | Reduces executive escalation pressures by 30%. Requires: Data Catalogue |
 
----
+**Prerequisites:** Platform Modernisation and Self-Service Analytics require Data Catalogue to be completed first.
 
-## Incidents
-
-Incidents are data failures that require resolution. They auto-spawn based on game conditions.
-
-| Type | Trigger |
-|---|---|
-| Data Quality Failure | Dataset quality drops critically low |
-| KPI Mismatch | Conflicting metrics across departments |
-| Silo Dependency Failure | A silo is blocking data flow |
-| Governance Failure | Dataset has no owner for too long |
-| Pipeline Break | Medallion promotion pipeline disrupted |
-| Unclassified Sensitive Data | Dataset unclassified for >5 ticks |
-| Data Breach | Confidential/Restricted + high risk + no custodian |
-| Compliance Audit Failed | Audit conditions not met at audit tick |
-
-### Severity
-- **Critical** — urgent, large trust penalty per tick unresolved
-- **High** — significant impact
-- **Medium** — moderate drain
-- **Low** — minor but accumulates
-
-Resolve incidents from the **Incidents** tab in the bottom feed, or click **Resolve** directly from the **Priority Queue** widget at the top of the centre panel.
+Launching an initiative while capacity is tight is a gamble — but waiting too long means you never reach the late-game effects.
 
 ---
 
-## Executive Pressures
+## Maturity Stages
 
-The executive team periodically issues demands. These appear in the **Executive** tab.
+Your organisational maturity is computed continuously from five factors:
 
-- Each pressure has a **time limit** — if it expires unmet, you lose reputation
-- Completing pressures gives Reputation +5 and Trust +10
-- Failing pressures drains both
+- **Ownership** — % of critical datasets with a Data Owner (weight: 25%)
+- **Stewardship** — % of all datasets with a Data Steward (weight: 20%)
+- **Technical control** — % with a Custodian or Engineer (weight: 15%)
+- **Data quality** — average composite quality across all 15 datasets (weight: 20%)
+- **Pressure handling** — resolved vs. expired pressures (weight: 10%)
+- **Initiative completion** — completed initiatives out of 8 (weight: 10%)
 
-Pressure types: Board Requests, Finance Pressures, Compliance Audits, CEO Escalations, Operational Reviews.
-
----
-
-## Compliance Audits
-
-Every ~25–30 ticks, a formal compliance audit is scheduled.
-
-**8 ticks before the audit**, a warning pressure card appears showing the pass criteria:
-- ≥ 1 Gold dataset
-- ≤ 3 open incidents
-- ≤ 30% of datasets ungoverned (no Owner)
-- Average dataset quality ≥ 55
-
-**On audit day:**
-- **Pass**: Trust +15, Reputation +8. Next audit in 25 ticks.
-- **Fail**: Trust -15, a critical `Compliance Audit Failed` incident is raised. Next audit in 20 ticks.
-
-Results appear in the **Events** feed immediately.
+| Stage | Score | What it means |
+|---|---|---|
+| **Chaos** | < 25 | Ungoverned. Pressures accumulate faster than you can respond. |
+| **Stabilising** | 25–49 | Foundations forming. Quality still drifting in places. |
+| **Governed** | 50–74 | Accountability is established. Executives are cautiously optimistic. |
+| **Data-Driven** | ≥ 75 | Trust earned. Governance is embedded in how the organisation works. |
 
 ---
 
-## The Priority Queue
+## The Panels
 
-The **"What Needs Attention Now?"** widget sits at the top of the centre panel. It scores every open incident, executive pressure, and high-risk silo by urgency and surfaces the top 3.
+### Left Panel — Domains & Catalogue
 
-Each row shows a quick-action button (Resolve / Deliver / Contain) so you can act without navigating away.
+- **Domain View** (top): Shows health per domain — average quality, ownership rate, open pressures. Click a domain section to see its datasets.
+- **Dataset Catalogue** (bottom): All 15 datasets. Filter by All / Critical / At Risk / Ungoverned / Gold. Click any dataset to open it in the inspector.
 
-Items with very high urgency scores blink. When the queue is empty, all systems are nominal.
+### Right Panel — Dataset Inspector
 
----
+Select a dataset from the catalogue or domain view to see:
+- Quality dimensions with live bars
+- Composite quality score and medallion tier
+- Data classification and governance risk
+- The political charge — what this dataset means to the organisation
+- Role assignment dropdowns (Owner, Steward, Custodian, Engineer)
+- Upstream dependencies and their quality
 
-## The Bottom Feed
+### Centre-Left — Pressure Queue
 
-Five tabs surface operational detail:
+All open business pressures, sorted by urgency. Expand a card to see the cause chain, consequence if ignored, and resolution options with capacity costs. Act here or let pressures expire at your peril.
 
-| Tab | Shows |
-|---|---|
-| **Incidents** | All open and in-progress incidents |
-| **Signals** | Analyst-detected data anomalies |
-| **Executive** | Active executive pressure demands |
-| **Pipeline** | Auto-fix and promotion activity log |
-| **Events** | Character events — real-time narrative from your team |
+### Centre-Right — Strategic Initiatives
 
-Tabs with active items show count badges. Urgent tabs blink.
+All 8 initiatives. Active ones show progress. Launch when you have the prerequisites, the capacity, and the timing is right.
 
----
+### Bottom — Event Log
 
-## The Dataset Catalogue
-
-The left panel lists all datasets. Filter using the four buttons:
-
-- **All** — every dataset
-- **At Risk** — composite quality < 60 or governance risk > 65%
-- **Ungoverned** — no Data Owner assigned
-- **Gold** — Gold-tier datasets only
-
-Click any dataset to open the **Dataset Inspector** in the right panel, where you can:
-- Assign governance roles
-- Set data classification
-- View quality dimensions
-- Enable/disable Auto-Fix
-- Manually trigger promotion
+A chronological feed of everything that has happened: new pressures, resolved pressures, completed initiatives, maturity milestones, delayed consequences. Read it to understand what is happening and why.
 
 ---
 
-## Endgame Archetypes
+## Trust Score
 
-When your session ends (by choice or by Trust Score collapse), you are classified into one of five archetypes:
+Your Trust Score is a composite of:
 
-| Archetype | What it means |
-|---|---|
-| **Mature, Data-Driven** | High scores across all dimensions. A genuine DMBOK success. |
-| **Technically Stable, Politically Fragile** | Great quality, but executives weren't satisfied. |
-| **Operationally Chaotic** | Too many incidents, not enough resolution bandwidth. |
-| **Governance Failure** | Data was ungoverned or unclassified at scale. |
-| **Self-Healing Illusion** | Auto-Fix masked the real problems. Quality was artificial. |
+- **Weighted quality** (40%) — average composite quality across all datasets
+- **Executive patience** (30%) — average patience across all 7 stakeholders
+- **Governance coverage** (30%) — % of datasets with at least an Owner assigned
+- **Initiative bonus** — completed initiatives add a small passive boost
 
----
-
-## Achievements
-
-Six achievements can be unlocked during a session:
-
-- **Data Sovereign** — All datasets have an Owner assigned simultaneously
-- **Gold Standard** — Promote 3 datasets to Gold
-- **Incident Commander** — Resolve 10 incidents in a single session
-- **Silo Buster** — Contain 5 data silos
-- **Board Favourite** — Complete 5 executive pressures without a single failure
-- **Silent Risk Warning** — End the session with a Data Breach incident that was never resolved
+A score above 50 means you're holding. Below 25, the organisation is losing confidence. Below 10, you're in crisis.
 
 ---
 
 ## Strategy Tips
 
-**Early game (ticks 1–15)**
-Assign analysts to departments immediately. Don't wait for incidents — get ahead of silos. Assign a Custodian to your first Bronze dataset as quickly as possible to enable promotion.
+**Early game (ticks 1–20)**
+Don't spread too thin. Pick the 3–4 most critical datasets (★★★★★) and govern them first. The General Ledger and Customer Master are almost always the right starting point — they are upstream of half the other datasets.
 
-**Mid game (ticks 15–40)**
-Prioritise classification — unclassified datasets are a liability as they age. Watch for the Compliance Audit warning (it arrives at tick 22). Make sure you have at least one Gold dataset before tick 30.
+**Cycle boundaries matter**
+Plan your actions before a cycle ends. A half-used cycle is wasted capacity. If you have 2 cap left and a role assignment costs 1, use it.
 
-**Pressure management**
-Never let a critical incident sit for more than 3 ticks. Use the Priority Queue to triage — it saves the time of scanning every tab manually.
+**Read the cause chains**
+Every pressure tells you exactly what caused it. Use that information — if the KPI Conflict fired because General Ledger accuracy is below 60, that tells you where to assign your Data Engineer, not just how to resolve the pressure card.
 
-**Scarcity decisions**
-When a new dataset spawns with no governance, you must decide: steal a Custodian from a Bronze dataset (risking its completeness) or let the new dataset drift. Neither is free.
+**Don't let stakeholders reach zero**
+Patience at 30 is manageable. Patience at 10 means a critical pressure is incoming. Resolve pressures from frustrated executives before they escalate. The Event Log will warn you.
 
-**Person departures**
-When a departure warning fires, immediately check which of their datasets is most critical and reassign. Three ticks goes fast.
+**Initiatives as multipliers**
+Governance Council early slows the pressure rate. MDM Programme mid-game stabilises your two highest-traffic datasets. Executive Data Literacy can be the difference between surviving the late game and losing stakeholder buy-in. Treat initiatives as investments, not checkboxes.
+
+**Platform-led is high variance**
+Starting with 3 cap per cycle means the first two cycles are brutally constrained. If you pick Platform-led, launch Data Catalogue in cycle 1 even if it hurts — you need the path to Platform Modernisation open as early as possible.
 
 ---
 
@@ -313,12 +312,13 @@ When a departure warning fires, immediately check which of their datasets is mos
 
 | Game Mechanic | DMBOK Knowledge Area |
 |---|---|
-| Medallion Bronze/Silver/Gold | Data Architecture & Data Quality Management |
+| Medallion Bronze / Silver / Gold | Data Architecture & Quality Management |
 | 5 quality dimensions | Data Quality Management (DAMA dimensions) |
-| Owner / Steward / Custodian roles | Data Governance — Roles & Responsibilities |
-| Data Classification | Data Security Management |
-| Silos | Data Integration & Interoperability |
-| Catalogue | Metadata Management |
-| Compliance Audits | Data Governance — Compliance & Audit |
-| Incidents | Data Quality — Issue Management |
-| Executive Pressures | Data Governance — Stakeholder Management |
+| Owner / Steward / Custodian / Engineer roles | Data Governance — Roles & Responsibilities |
+| Data classification (Restricted / Confidential / Internal) | Data Security Management |
+| Business pressures with cause chains | Data Quality — Issue Management |
+| Stakeholder patience | Data Governance — Stakeholder Management |
+| Compliance audits | Data Governance — Compliance & Audit |
+| Strategic initiatives | Data Governance — Programme Management |
+| Maturity stages | DAMA-DMBOK Maturity Model |
+| Upstream dependencies | Data Integration & Interoperability |

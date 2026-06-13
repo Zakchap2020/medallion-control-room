@@ -1,232 +1,238 @@
 import { create } from "zustand";
-import type {
-  GameState,
-  Department,
-  PersonRoleType,
-  GamePhase,
-  DataClassification,
-} from "../models/types";
+import type { GameState, GovernanceModel, StaffRole, ResolutionOption } from "../models/types";
+import { buildInitialDatasets } from "../data/datasets";
+import { ALL_STAFF, ALL_STAKEHOLDERS } from "../data/staff";
+import { INITIATIVE_BY_KEY } from "../data/initiatives";
+import { runOneTick } from "../engine/runTick";
+import { computeFinalScore } from "../engine/scoringEngine";
 
-import { runTick } from "../engine/runTick";
-import { compositeQuality } from "../engine/medallionEngine";
-import { generatePersonnel, generateAnalysts, generateAvatarPool } from "../engine/personnelGenerator";
-
-
-interface GameStore extends GameState {
-  runTick: () => void;
-  assignAnalyst: (analystId: string, department: Department | undefined) => void;
-  investigateSignal: (signalId: string) => void;
-  resolveSignal: (signalId: string) => void;
-  containSilo: (siloId: string) => void;
-  assignGovernanceRole: (datasetId: string, role: PersonRoleType, personId: string | undefined) => void;
-  resolveIncident: (incidentId: string) => void;
-  assignAnalystToIncident: (incidentId: string) => void;
-  completeExecutivePressure: (pressureId: string) => void;
-  toggleAutoFix: (datasetId: string) => void;
-  // Phase 6
-  endSession: () => void;
-  continueSession: () => void;
-  resetGame: () => void;
-  promoteDataset: (datasetId: string) => void;
-  setClassification: (datasetId: string, classification: DataClassification | undefined) => void;
-}
-
-function createInitialState(): GameState {
-  const usedNames  = new Set<string>();
-  const avatarPool = generateAvatarPool();
-  const persons    = generatePersonnel(usedNames, avatarPool.slice(0, 6));
-  const analysts   = generateAnalysts(usedNames, avatarPool.slice(6, 9));
+function createInitialState(): Omit<GameState, "startGame" | "runTick" | "endSession" | "resetGame" | "assignRole" | "resolvePressure" | "launchInitiative"> {
   return {
-    datasets: [],
-    analysts,
-    persons,
-    silos: [],
-    signals: [],
-    catalogue: {},
-    incidents: [],
-    executivePressures: [],
-    healingEvents: [],
-    tick: 0,
-    trustScore: 0,
-    reputation: 50,
-    gamePhase: "playing" as GamePhase,
-    peakTrustScore: 0,
-    characterEvents: [],
-    nextAuditTick: 30,
-    auditsPassed: 0,
-    auditsFailed: 0,
+    governanceModel:       null,
+    datasets:              buildInitialDatasets(),
+    staff:                 ALL_STAFF.map((s) => ({ ...s })),
+    stakeholders:          ALL_STAKEHOLDERS.map((s) => ({ ...s })),
+    pressures:             [],
+    initiatives:           [],
+    narrativeLog:          [],
+    delayedEffects:        [],
+    tick:                  0,
+    trustScore:            0,
+    maturityStage:         "chaos",
+    executiveSatisfaction: 70,
+    cycleCapacity:         { total: 4, used: 0, cycleStartTick: 0 },
+    gamePhase:             "setup",
+    peakTrustScore:        0,
+    nextAuditTick:         35,
+    auditsPassed:          0,
+    auditsFailed:          0,
+    pressureCooldowns:     {},
   };
 }
 
-export const useGameStore = create<GameStore>((set, get) => ({
+export const useGameStore = create<GameState>((set, get) => ({
   ...createInitialState(),
+
+  // ── Setup ────────────────────────────────────────────────────────────────
+
+  startGame: (model: GovernanceModel) => {
+    const capMap: Record<GovernanceModel, number> = { centralised: 4, federated: 6, platform_led: 3 };
+    set({
+      governanceModel: model,
+      cycleCapacity:   { total: capMap[model], used: 0, cycleStartTick: 0 },
+      gamePhase:       "playing",
+    });
+  },
+
+  // ── Game loop ────────────────────────────────────────────────────────────
 
   runTick: () => {
     const state = get();
-    const updates = runTick(state);
-    set(updates);
+    if (state.gamePhase !== "playing") return;
+    const partial = runOneTick(state);
+    set(partial);
   },
 
-  assignAnalyst: (analystId, department) => {
-    set((s) => ({
-      analysts: s.analysts.map((a) =>
-        a.id === analystId ? { ...a, assignedDepartment: department } : a
-      ),
-    }));
-  },
-
-  investigateSignal: (signalId) => {
-    const { signals, silos } = get();
-    const signal = signals.find((s) => s.id === signalId);
-    if (!signal) return;
-    set({
-      signals: signals.map((s) => s.id === signalId ? { ...s, resolved: true } : s),
-      silos: signal.relatedSiloId
-        ? silos.map((s) => s.id === signal.relatedSiloId ? { ...s, discovered: true } : s)
-        : silos,
-    });
-  },
-
-  resolveSignal: (signalId) => {
-    set((s) => ({
-      signals: s.signals.map((sig) =>
-        sig.id === signalId ? { ...sig, resolved: true } : sig
-      ),
-    }));
-  },
-
-  containSilo: (siloId) => {
-    set((s) => ({
-      silos: s.silos.map((silo) =>
-        silo.id === siloId ? { ...silo, contained: true } : silo
-      ),
-      trustScore: s.trustScore + 5,
-    }));
-  },
-
-  assignGovernanceRole: (datasetId, role, personId) => {
-    set((s) => {
-      const field =
-        role === "owner" ? "ownerId" :
-        role === "steward" ? "stewardId" : "custodianId";
-
-      // Scarcity: one person can only hold each role on one dataset at a time.
-      // Clear them from any other dataset before assigning here.
-      const updated: typeof s.catalogue = {};
-      for (const [id, entry] of Object.entries(s.catalogue)) {
-        if (id !== datasetId && personId && entry[field] === personId) {
-          updated[id] = { ...entry, [field]: undefined };
-        } else {
-          updated[id] = entry;
-        }
-      }
-
-      const target = updated[datasetId];
-      if (!target) return {};
-      updated[datasetId] = { ...target, [field]: personId };
-
-      return { catalogue: updated };
-    });
-  },
-
-  resolveIncident: (incidentId) => {
-    set((s) => {
-      const inc = s.incidents.find((i) => i.id === incidentId);
-      const trustBonus = inc?.severity === "critical" ? 8
-        : inc?.severity === "high" ? 5
-        : inc?.severity === "medium" ? 3 : 1;
-      return {
-        incidents: s.incidents.map((i) =>
-          i.id === incidentId ? { ...i, status: "resolved" as const } : i
-        ),
-        trustScore: s.trustScore + trustBonus,
-        reputation: Math.min(100, s.reputation + 2),
-      };
-    });
-  },
-
-  assignAnalystToIncident: (incidentId) => {
-    set((s) => ({
-      incidents: s.incidents.map((i) =>
-        i.id === incidentId && i.status === "open"
-          ? { ...i, status: "in_progress" as const, timeToResolve: i.timeToResolve + 3 }
-          : i
-      ),
-    }));
-  },
-
-  completeExecutivePressure: (pressureId) => {
-    set((s) => ({
-      executivePressures: s.executivePressures.map((p) =>
-        p.id === pressureId ? { ...p, status: "completed" as const } : p
-      ),
-      reputation: Math.min(100, s.reputation + 5),
-      trustScore: s.trustScore + 10,
-    }));
-  },
-
-  toggleAutoFix: (datasetId) => {
-    set((s) => ({
-      datasets: s.datasets.map((d) =>
-        d.id === datasetId ? { ...d, autoFixEnabled: !d.autoFixEnabled } : d
-      ),
-    }));
-  },
+  // ── End / reset ──────────────────────────────────────────────────────────
 
   endSession: () => {
-    set({ gamePhase: "ended" as GamePhase });
-  },
-
-  continueSession: () => {
-    set({ gamePhase: "playing" as GamePhase });
+    const state = get();
+    const result = computeFinalScore(state);
+    set({ gamePhase: "ended", endState: result.endState, finalScore: result.overallScore });
   },
 
   resetGame: () => {
-    set(createInitialState());
+    set({ ...createInitialState() });
   },
 
-  setClassification: (datasetId, classification) => {
-    set((s) => ({
-      catalogue: {
-        ...s.catalogue,
-        [datasetId]: { ...s.catalogue[datasetId], classification },
-      },
-    }));
+  // ── Governance — costs 1 capacity each ────────────────────────────────────
+
+  assignRole: (datasetId: string, role: StaffRole, staffId: string | undefined) => {
+    const state = get();
+    if (state.cycleCapacity.used >= state.cycleCapacity.total) return;
+    const ds = state.datasets[datasetId];
+    if (!ds) return;
+
+    const updated = { ...ds };
+    if (role === "DataOwner")    updated.ownerId    = staffId;
+    if (role === "DataSteward")  updated.stewardId  = staffId;
+    if (role === "DataCustodian") updated.custodianId = staffId;
+    if (role === "DataEngineer") updated.engineerId  = staffId;
+
+    set({
+      datasets: { ...state.datasets, [datasetId]: updated },
+      cycleCapacity: { ...state.cycleCapacity, used: state.cycleCapacity.used + 1 },
+    });
   },
 
-  promoteDataset: (datasetId) => {
-    set((s) => {
-      const ds    = s.datasets.find((d) => d.id === datasetId);
-      const entry = s.catalogue[datasetId];
-      if (!ds || !entry) return {};
+  // ── Resolve pressure ──────────────────────────────────────────────────────
 
-      const cq = compositeQuality(ds.quality);
+  resolvePressure: (pressureId: string, optionId: string) => {
+    const state = get();
+    const pressure = state.pressures.find((p) => p.id === pressureId);
+    if (!pressure || pressure.status !== "open") return;
 
-      const boost = (q: typeof ds.quality, amounts: Partial<typeof ds.quality>) => ({
-        accuracy:     Math.min(100, q.accuracy     + (amounts.accuracy     ?? 0)),
-        completeness: Math.min(100, q.completeness + (amounts.completeness ?? 0)),
-        consistency:  Math.min(100, q.consistency  + (amounts.consistency  ?? 0)),
-        uniqueness:   Math.min(100, q.uniqueness   + (amounts.uniqueness   ?? 0)),
-        timeliness:   Math.min(100, q.timeliness   + (amounts.timeliness   ?? 0)),
+    const option: ResolutionOption | undefined = pressure.resolutionOptions.find((o) => o.id === optionId);
+    if (!option) return;
+
+    const cost = option.capacityCost;
+    if (state.cycleCapacity.used + cost > state.cycleCapacity.total) return;
+
+    // Apply effects
+    let trustDelta = option.effect.trustDelta ?? 0;
+    const updatedDatasets = { ...state.datasets };
+    const updatedStakeholders = [...state.stakeholders];
+
+    if (option.effect.datasetEffects) {
+      for (const de of option.effect.datasetEffects) {
+        const ds = updatedDatasets[de.datasetId];
+        if (!ds) continue;
+        let q = { ...ds.quality };
+        if (de.qualityBoost) {
+          for (const [k, v] of Object.entries(de.qualityBoost)) {
+            if (v !== undefined) (q as Record<string, number>)[k] = Math.min(100, (q as Record<string, number>)[k] + v);
+          }
+        }
+        const risk = Math.max(0, ds.governanceRisk - (de.riskReduction ?? 0));
+        updatedDatasets[de.datasetId] = { ...ds, quality: q, governanceRisk: risk };
+      }
+    }
+
+    if (option.effect.patienceBoost && option.effect.stakeholderId) {
+      const idx = updatedStakeholders.findIndex((s) => s.id === option.effect.stakeholderId);
+      if (idx >= 0) {
+        updatedStakeholders[idx] = {
+          ...updatedStakeholders[idx],
+          patience: Math.min(100, Math.max(0, updatedStakeholders[idx].patience + (option.effect.patienceBoost ?? 0))),
+        };
+      }
+    }
+
+    // Delayed effects
+    const updatedDelayed = [...state.delayedEffects];
+    if (option.effect.delayedTrustDelta !== undefined && option.effect.delayedTicks !== undefined) {
+      updatedDelayed.push({
+        id: `de-${Date.now()}`,
+        firesAtTick: state.tick + option.effect.delayedTicks,
+        trustDelta: option.effect.delayedTrustDelta,
+        narrative: `Delayed consequence from earlier decision: ${option.effect.narrativeOutcome}`,
       });
+    }
 
-      if (ds.layer === "bronze" && cq > 65 && entry.custodianId) {
-        const quality = boost(ds.quality, { completeness: 10, consistency: 12, timeliness: 7 });
-        return {
-          datasets:  s.datasets.map((d)  => d.id === datasetId  ? { ...d,  layer: "silver" as const, quality } : d),
-          catalogue: { ...s.catalogue, [datasetId]: { ...entry, layer: "silver" as const } },
-        };
+    // Initiative unlock
+    let updatedInitiatives = [...state.initiatives];
+    if (option.effect.initiativeUnlock) {
+      const key = option.effect.initiativeUnlock;
+      const def = INITIATIVE_BY_KEY[key];
+      const alreadyActive = updatedInitiatives.some((i) => i.key === key);
+      if (def && !alreadyActive) {
+        updatedInitiatives = [...updatedInitiatives, {
+          id: `ini-${Date.now()}`,
+          key,
+          status: "active",
+          tickStarted: state.tick,
+          tickCompletes: state.tick + def.cyclesRequired * 15,
+          progress: 0,
+        }];
       }
+    }
 
-      if (ds.layer === "silver" && cq > 80 && entry.ownerId && entry.stewardId) {
-        const quality = boost(ds.quality, { accuracy: 10, consistency: 10, uniqueness: 6, timeliness: 8 });
-        return {
-          datasets:  s.datasets.map((d)  => d.id === datasetId  ? { ...d,  layer: "gold" as const, quality } : d),
-          catalogue: { ...s.catalogue, [datasetId]: { ...entry, layer: "gold" as const } },
-        };
+    // Narrative log entry
+    const narrativeLog = [
+      {
+        id: `ne-res-${Date.now()}`,
+        tick: state.tick,
+        type: "resolution" as const,
+        title: `Resolved: ${pressure.title}`,
+        body: option.effect.narrativeOutcome,
+        severity: "info" as const,
+      },
+      ...state.narrativeLog,
+    ];
+
+    const updatedPressures = state.pressures.map((p) =>
+      p.id === pressureId ? { ...p, status: "resolved" as const, resolvedAtTick: state.tick } : p
+    );
+
+    set({
+      pressures: updatedPressures,
+      datasets: updatedDatasets,
+      stakeholders: updatedStakeholders,
+      delayedEffects: updatedDelayed,
+      initiatives: updatedInitiatives,
+      narrativeLog,
+      trustScore: Math.min(100, Math.max(0, state.trustScore + trustDelta)),
+      cycleCapacity: { ...state.cycleCapacity, used: state.cycleCapacity.used + cost },
+    });
+  },
+
+  // ── Launch initiative ──────────────────────────────────────────────────────
+
+  launchInitiative: (key: string) => {
+    const state = get();
+    const def = INITIATIVE_BY_KEY[key];
+    if (!def) return;
+
+    // Check prerequisites
+    if (def.prerequisites) {
+      for (const prereqKey of def.prerequisites) {
+        const done = state.initiatives.some((i) => i.key === prereqKey && i.status === "completed");
+        if (!done) return;
       }
+    }
 
-      return {};
+    // Check not already active
+    if (state.initiatives.some((i) => i.key === key && (i.status === "active" || i.status === "completed"))) return;
+
+    // Check capacity
+    const cost = def.launchCost;
+    if (state.cycleCapacity.used + cost > state.cycleCapacity.total) return;
+
+    const newInitiative = {
+      id: `ini-${Date.now()}`,
+      key,
+      status: "active" as const,
+      tickStarted: state.tick,
+      tickCompletes: state.tick + def.cyclesRequired * 15,
+      progress: 0,
+    };
+
+    const narrativeLog = [
+      {
+        id: `ne-ini-${Date.now()}`,
+        tick: state.tick,
+        type: "initiative" as const,
+        title: `Launched: ${def.name}`,
+        body: def.description,
+        severity: "info" as const,
+      },
+      ...state.narrativeLog,
+    ];
+
+    set({
+      initiatives: [...state.initiatives, newInitiative],
+      cycleCapacity: { ...state.cycleCapacity, used: state.cycleCapacity.used + cost },
+      narrativeLog,
     });
   },
 }));
