@@ -31,12 +31,22 @@ export function generateBronzeDatasets(tick: number): Dataset[] {
     const dept = randomFrom(DEPARTMENTS);
     const prefix = randomFrom(DATASET_PREFIXES);
     const suffix = randomFrom(DATASET_SUFFIXES);
+
     datasets.push({
       id: `ds-${tick}-${counter}`,
       name: `${dept.toLowerCase()}_${prefix}_${suffix}`,
       department: dept,
       layer: "bronze",
       recordCount: randomInt(100, 5000),
+      autoFixEnabled: true,
+      // Raw Bronze data starts imperfect — reflects real ingestion reality
+      quality: {
+        accuracy:     randomInt(55, 82),
+        completeness: randomInt(48, 78),
+        consistency:  randomInt(42, 70),
+        uniqueness:   randomInt(65, 90),
+        timeliness:   randomInt(58, 86),
+      },
     });
   }
 

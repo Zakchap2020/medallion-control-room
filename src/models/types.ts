@@ -1,11 +1,22 @@
 export type Department = "Finance" | "Sales" | "Marketing" | "HR" | "Operations";
+export type DataLayer  = "bronze" | "silver" | "gold";
+
+export interface DatasetQuality {
+  accuracy:     number; // correctness, 0–100
+  completeness: number; // no missing values, 0–100
+  consistency:  number; // schema / format coherence, 0–100
+  uniqueness:   number; // no duplicates, 0–100
+  timeliness:   number; // data currency, 0–100
+}
 
 export interface Dataset {
   id: string;
   name: string;
   department: Department;
-  layer: "bronze";
+  layer: DataLayer;
   recordCount: number;
+  quality: DatasetQuality;
+  autoFixEnabled: boolean;
 }
 
 export interface Analyst {
@@ -68,7 +79,7 @@ export interface Person {
 export interface CatalogueEntry {
   datasetId: string;
   name: string;
-  layer: "bronze" | "silver" | "gold";
+  layer: DataLayer;
   ownerId?: string;
   stewardId?: string;
   custodianId?: string;
@@ -96,7 +107,7 @@ export interface Incident {
   affectedDatasetIds: string[];
   source: "analyst" | "system" | "silo" | "governance";
   status: IncidentStatus;
-  timeToResolve: number;           // ticks remaining
+  timeToResolve: number;
   triggeredBySignalId?: string;
   triggeredBySiloId?: string;
   createdAtTick: number;
@@ -117,8 +128,29 @@ export interface ExecutivePressure {
   demand: string;
   urgency: "low" | "medium" | "high" | "critical";
   requiredDatasetDomains: Department[];
-  timeLimit: number;               // ticks remaining
+  timeLimit: number;
   status: PressureStatus;
+}
+
+// ── Phase 5 ──────────────────────────────────────────────────────────────────
+
+export type HealingAction =
+  | "clean_nulls"
+  | "deduplicate"
+  | "standardise_schema"
+  | "aggregate"
+  | "validate_governance_rules"
+  | "auto_promoted";
+
+export interface HealingEvent {
+  id: string;
+  tick: number;
+  datasetId: string;
+  datasetName: string;
+  action: HealingAction;
+  success: boolean;
+  qualityDelta: number;
+  note?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -132,6 +164,7 @@ export interface GameState {
   catalogue: Record<string, CatalogueEntry>;
   incidents: Incident[];
   executivePressures: ExecutivePressure[];
+  healingEvents: HealingEvent[];
   tick: number;
   trustScore: number;
   reputation: number;

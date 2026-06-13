@@ -8,6 +8,7 @@ import { SignalFeed } from "../signals/SignalFeed";
 import { GovernancePanel } from "../governance/GovernancePanel";
 import { IncidentPanel } from "../incidents/IncidentPanel";
 import { ExecutivePressurePanel } from "../executive/ExecutivePressurePanel";
+import { PipelineActivity } from "../pipeline/PipelineActivity";
 
 const styles = {
   root: {
@@ -136,6 +137,7 @@ export function DashboardLayout() {
   const catalogue          = useGameStore((s) => s.catalogue);
   const incidents          = useGameStore((s) => s.incidents);
   const executivePressures = useGameStore((s) => s.executivePressures);
+  const datasets           = useGameStore((s) => s.datasets);
 
   const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
 
@@ -144,6 +146,7 @@ export function DashboardLayout() {
   const ungoverned         = Object.values(catalogue).filter((e) => !e.ownerId).length;
   const activeIncidents    = incidents.filter((i) => i.status === "open" || i.status === "in_progress").length;
   const activePressures    = executivePressures.filter((p) => p.status === "pending").length;
+  const goldCount          = datasets.filter((d) => d.layer === "gold").length;
 
   const trustColor =
     trustScore > 40 ? "#00ff88" :
@@ -166,6 +169,7 @@ export function DashboardLayout() {
         <StatBadge label="Silos"       value={activeSiloCount}   color={activeSiloCount   > 0 ? "#ff4444" : "#2a2a2a"} />
         <StatBadge label="Signals"     value={unresolvedSignals} color={unresolvedSignals > 0 ? "#ffa500" : "#2a2a2a"} />
         <StatBadge label="Ungoverned"  value={ungoverned}        color={ungoverned > 3 ? "#ff4444" : ungoverned > 0 ? "#ffa500" : "#2a2a2a"} />
+        <StatBadge label="Gold"        value={goldCount}         color={goldCount > 0 ? "#c8a800" : "#2a2a2a"} />
       </div>
 
       {/* Main Panels */}
@@ -221,13 +225,16 @@ export function DashboardLayout() {
         </div>
       </div>
 
-      {/* Bottom Zone: Signal Feed | Incident Panel */}
+      {/* Bottom Zone: Signal Feed | Incident Panel | Pipeline Activity */}
       <div style={styles.bottomZone}>
-        <div style={{ flex: 3, padding: "10px 14px", borderRight: "1px solid #1e1e1e" }}>
+        <div style={{ flex: 2, padding: "10px 12px", borderRight: "1px solid #1e1e1e", minWidth: 0 }}>
           <SignalFeed />
         </div>
-        <div style={{ flex: 2, padding: "10px 14px" }}>
+        <div style={{ flex: 2, padding: "10px 12px", borderRight: "1px solid #1e1e1e", minWidth: 0 }}>
           <IncidentPanel />
+        </div>
+        <div style={{ flex: 1, padding: "10px 12px", minWidth: 0 }}>
+          <PipelineActivity />
         </div>
       </div>
 

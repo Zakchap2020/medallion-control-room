@@ -16,6 +16,14 @@ import {
   generateExecutivePressure,
   tickExecutivePressures,
 } from "./executivePressureEngine";
+import {
+  applyQualityDrift,
+  runAutoFix,
+  promoteDatasets,
+  computeQualityTrustDelta,
+} from "./medallionEngine";
+
+const MAX_HEALING_HISTORY = 40;
 
 export function runTick(state: GameState): Partial<GameState> {
   const nextTick = state.tick + 1;
@@ -49,7 +57,7 @@ export function runTick(state: GameState): Partial<GameState> {
   const newSignals = generateSignals(stateForSignals, nextTick);
   const allSignals = [...state.signals, ...newSignals];
 
-  // 5. Incidents: tick existing timers, then generate new ones
+  // 5. Incidents: tick existing timers + generate new
   const stateForIncidents: GameState = {
     ...state,
     datasets: allDatasets,
@@ -62,23 +70,45 @@ export function runTick(state: GameState): Partial<GameState> {
   const newIncidents = generateIncidents(stateForIncidents, nextTick);
   const allIncidents = [...tickedIncidents, ...newIncidents];
 
-  // 6. Executive pressure: tick timers, then generate new
+  // 6. Executive pressure: tick timers + generate new
   const { updated: tickedPressures, reputationDelta: execRepDelta } =
     tickExecutivePressures(state.executivePressures);
-  const stateForExec: GameState = {
-    ...stateForIncidents,
-    incidents: allIncidents,
-  };
+  const stateForExec: GameState = { ...stateForIncidents, incidents: allIncidents };
   const newPressures = generateExecutivePressure(stateForExec, nextTick);
   const allPressures = [...tickedPressures, ...newPressures];
 
-  // 7. Trust score
-  const siloTrustDelta      = computeSiloTrustDelta(allSilos);
-  const govTrustDelta       = computeGovernanceTrustDelta(updatedCatalogue);
-  const incidentTrustDelta  = computeIncidentTrustDelta(allIncidents);
-  const trustScore = state.trustScore + 1 + siloTrustDelta + govTrustDelta + incidentTrustDelta;
+  // 7. Medallion pipeline (Phase 5)
+  //    a. Quality drift degrades data each tick
+  const driftedDatasets = applyQualityDrift(allDatasets, updatedCatalogue, allSilos);
+  //    b. Auto-fix attempts repair on eligible datasets
+  const { datasets: fixedDatasets, events: fixEvents } = runAutoFix(
+    driftedDatasets,
+    updatedCatalogue,
+    allSilos,
+    nextTick
+  );
+  //    c. Promote Bronze → Silver → Gold where conditions are met
+  const {
+    datasets: promotedDatasets,
+    catalogue: promotedCatalogue,
+    events: promoteEvents,
+  } = promoteDatasets(fixedDatasets, updatedCatalogue, nextTick);
 
-  // 8. Reputation (slower-moving, heavier penalty on failures)
+  const tickHealingEvents = [...fixEvents, ...promoteEvents];
+  const allHealingEvents = [
+    ...tickHealingEvents,
+    ...state.healingEvents,
+  ].slice(0, MAX_HEALING_HISTORY);
+
+  // 8. Trust score
+  const siloTrustDelta     = computeSiloTrustDelta(allSilos);
+  const govTrustDelta      = computeGovernanceTrustDelta(promotedCatalogue);
+  const incidentTrustDelta = computeIncidentTrustDelta(allIncidents);
+  const qualityTrustDelta  = computeQualityTrustDelta(promotedDatasets);
+  const trustScore = state.trustScore + 1
+    + siloTrustDelta + govTrustDelta + incidentTrustDelta + qualityTrustDelta;
+
+  // 9. Reputation
   const reputationDelta = incRepDelta + execRepDelta;
   const reputationDrift = trustScore > state.trustScore ? 0.5 : -0.5;
   const reputation = Math.max(
@@ -88,12 +118,13 @@ export function runTick(state: GameState): Partial<GameState> {
 
   return {
     tick: nextTick,
-    datasets: allDatasets,
+    datasets: promotedDatasets,
     silos: allSilos,
     signals: allSignals,
-    catalogue: updatedCatalogue,
+    catalogue: promotedCatalogue,
     incidents: allIncidents,
     executivePressures: allPressures,
+    healingEvents: allHealingEvents,
     trustScore,
     reputation,
   };

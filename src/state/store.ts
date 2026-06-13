@@ -6,6 +6,7 @@ import type {
   Department,
   PersonRoleType,
 } from "../models/types";
+
 import { runTick } from "../engine/runTick";
 
 const INITIAL_ANALYSTS: Analyst[] = [
@@ -33,6 +34,7 @@ interface GameStore extends GameState {
   resolveIncident: (incidentId: string) => void;
   assignAnalystToIncident: (incidentId: string) => void;
   completeExecutivePressure: (pressureId: string) => void;
+  toggleAutoFix: (datasetId: string) => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -44,6 +46,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   catalogue: {},
   incidents: [],
   executivePressures: [],
+  healingEvents: [],
   tick: 0,
   trustScore: 0,
   reputation: 50,
@@ -137,6 +140,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ),
       reputation: Math.min(100, s.reputation + 5),
       trustScore: s.trustScore + 10,
+    }));
+  },
+
+  toggleAutoFix: (datasetId) => {
+    set((s) => ({
+      datasets: s.datasets.map((d) =>
+        d.id === datasetId ? { ...d, autoFixEnabled: !d.autoFixEnabled } : d
+      ),
     }));
   },
 }));

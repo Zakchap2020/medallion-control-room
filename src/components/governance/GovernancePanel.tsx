@@ -28,6 +28,7 @@ export function GovernancePanel({ selectedDatasetId }: Props) {
   const catalogue = useGameStore((s) => s.catalogue);
   const datasets = useGameStore((s) => s.datasets);
   const assignGovernanceRole = useGameStore((s) => s.assignGovernanceRole);
+  const toggleAutoFix = useGameStore((s) => s.toggleAutoFix);
 
   if (!selectedDatasetId) {
     return (
@@ -74,10 +75,28 @@ export function GovernancePanel({ selectedDatasetId }: Props) {
             transition: "width 0.3s",
           }} />
         </div>
-        <div style={{ marginTop: "5px", fontSize: "9px", color: "#333", textTransform: "uppercase" }}>
-          Status: <span style={{ color: entry.status === "official" ? "#00ff88" : "#ffa500" }}>
-            {entry.status}
+        <div style={{ marginTop: "5px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: "9px", color: "#333", textTransform: "uppercase" }}>
+            Status: <span style={{ color: entry.status === "official" ? "#00ff88" : "#ffa500" }}>
+              {entry.status}
+            </span>
           </span>
+          <button
+            onClick={() => toggleAutoFix(selectedDatasetId)}
+            style={{
+              background: dataset.autoFixEnabled ? "#001a0d" : "transparent",
+              border: `1px solid ${dataset.autoFixEnabled ? "#00ff88" : "#333"}`,
+              color: dataset.autoFixEnabled ? "#00ff88" : "#444",
+              borderRadius: "2px",
+              padding: "2px 8px",
+              fontSize: "9px",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              letterSpacing: "0.04em",
+            }}
+          >
+            Auto-Fix {dataset.autoFixEnabled ? "ON" : "OFF"}
+          </button>
         </div>
       </div>
 
