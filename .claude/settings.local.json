@@ -16,7 +16,8 @@
       "Bash(git commit -m ' *)",
       "Bash(gh auth *)",
       "Bash(gh repo *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(git commit *)"
     ],
     "additionalDirectories": [
       "/Users/zakari/projects/Data Management Game/src"

@@ -3,12 +3,12 @@ import { playSound, setMuted, getMuted } from "../../engine/soundEngine";
 import { useGameStore } from "../../state/store";
 import { DatasetCatalogue } from "../catalogue/DatasetCatalogue";
 import { AnalystPanel } from "../analysts/AnalystPanel";
-import { SiloPanel } from "../silos/SiloPanel";
 import { GovernancePanel } from "../governance/GovernancePanel";
 import { BottomFeed } from "../feed/BottomFeed";
 import { EndScreen } from "../endgame/EndScreen";
 import { ToastStack, showToast } from "../ui/ToastStack";
 import { PriorityQueue } from "../ui/PriorityQueue";
+import { OrgMapPanel } from "../orgmap/OrgMapPanel";
 import { computeFinalScore } from "../../engine/scoringEngine";
 
 // ── Shared visual tokens ─────────────────────────────────────────────────────
@@ -279,10 +279,10 @@ export function DashboardLayout() {
           </div>
         </div>
 
-        {/* Center: Priority triage + Silo Monitor */}
+        {/* Center: Priority triage + Org Map */}
         <div style={styles.centerPanel}>
           <PriorityQueue />
-          <SiloPanel />
+          <OrgMapPanel />
         </div>
 
         {/* Right: Monitoring + Dataset Inspector */}
