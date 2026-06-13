@@ -4,6 +4,7 @@ import type { PersonRoleType, DatasetQuality, DataClassification, PersonTrait } 
 import { showToast } from "../ui/ToastStack";
 import { compositeQuality } from "../../engine/medallionEngine";
 import { playSound } from "../../engine/soundEngine";
+import { Avatar } from "../ui/Avatar";
 
 const TRAIT_COLORS: Record<PersonTrait, string> = {
   methodical: "#00bfff",
@@ -444,6 +445,9 @@ export function GovernancePanel({ selectedDatasetId }: Props) {
                   </div>
                   {current && (
                     <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                      {current.avatarIndex !== undefined && (
+                        <Avatar index={current.avatarIndex} size={22} />
+                      )}
                       <span style={{ fontSize: "9px", color: "#00ff88" }}>✓ {current.name}</span>
                       {current.trait && (
                         <span style={{

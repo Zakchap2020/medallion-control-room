@@ -10,7 +10,7 @@ import type {
 
 import { runTick } from "../engine/runTick";
 import { compositeQuality } from "../engine/medallionEngine";
-import { generatePersonnel, generateAnalysts } from "../engine/personnelGenerator";
+import { generatePersonnel, generateAnalysts, generateAvatarPool } from "../engine/personnelGenerator";
 
 
 interface GameStore extends GameState {
@@ -33,9 +33,10 @@ interface GameStore extends GameState {
 }
 
 function createInitialState(): GameState {
-  const usedNames = new Set<string>();
-  const persons   = generatePersonnel(usedNames);
-  const analysts  = generateAnalysts(usedNames);
+  const usedNames  = new Set<string>();
+  const avatarPool = generateAvatarPool();
+  const persons    = generatePersonnel(usedNames, avatarPool.slice(0, 6));
+  const analysts   = generateAnalysts(usedNames, avatarPool.slice(6, 9));
   return {
     datasets: [],
     analysts,

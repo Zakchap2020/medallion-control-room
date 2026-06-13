@@ -26,6 +26,7 @@ export interface Analyst {
   skills: { analysis: number; governance: number };
   assignedDepartment?: Department;
   active: boolean;
+  avatarIndex?: number;
 }
 
 export interface Silo {
@@ -70,6 +71,7 @@ export interface Person {
   roleType: PersonRoleType;
   skills: { governance: number; analysis: number; engineering: number };
   trait?: PersonTrait;
+  avatarIndex?: number;
   active?: boolean;
   departsAtTick?: number;
   returnsAtTick?: number;

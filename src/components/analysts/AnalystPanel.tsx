@@ -1,5 +1,6 @@
 import { useGameStore } from "../../state/store";
 import type { Department } from "../../models/types";
+import { Avatar } from "../ui/Avatar";
 
 const DEPARTMENTS: Department[] = ["Finance", "Sales", "Marketing", "HR", "Operations"];
 
@@ -34,9 +35,12 @@ export function AnalystPanel() {
               padding: "7px 9px",
             }}
           >
-            {/* Name + status */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "5px" }}>
-              <span style={{ color: "#c0c0c0", fontSize: "11px" }}>{analyst.name}</span>
+            {/* Avatar + name + status */}
+            <div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "5px" }}>
+              {analyst.avatarIndex !== undefined && (
+                <Avatar index={analyst.avatarIndex} size={30} />
+              )}
+              <span style={{ color: "#c0c0c0", fontSize: "11px", flex: 1 }}>{analyst.name}</span>
               {isAssigned && (
                 <span style={{ fontSize: "8px", color: deptColor, letterSpacing: "0.05em" }}>
                   ● {analyst.assignedDepartment}

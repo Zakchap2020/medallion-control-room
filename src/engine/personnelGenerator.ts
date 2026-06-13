@@ -88,36 +88,48 @@ function makePerson(
   };
 }
 
-export function generateAnalysts(used: Set<string> = new Set()): Analyst[] {
+export function generateAvatarPool(): number[] {
+  const a = Array.from({ length: 25 }, (_, i) => i);
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+export function generateAnalysts(used: Set<string> = new Set(), avatarPool: number[] = []): Analyst[] {
   return [
     {
       id: "analyst-1",
       name: pickName(used),
       skills: { analysis: rnd(6, 9), governance: rnd(4, 7) },
       active: true,
+      avatarIndex: avatarPool[0],
     },
     {
       id: "analyst-2",
       name: pickName(used),
       skills: { analysis: rnd(4, 7), governance: rnd(6, 9) },
       active: true,
+      avatarIndex: avatarPool[1],
     },
     {
       id: "analyst-3",
       name: pickName(used),
       skills: { analysis: rnd(5, 8), governance: rnd(5, 8) },
       active: true,
+      avatarIndex: avatarPool[2],
     },
   ];
 }
 
-export function generatePersonnel(used: Set<string> = new Set()): Person[] {
+export function generatePersonnel(used: Set<string> = new Set(), avatarPool: number[] = []): Person[] {
   return [
-    makePerson("person-1", "owner",     used),
-    makePerson("person-2", "owner",     used),
-    makePerson("person-3", "steward",   used),
-    makePerson("person-4", "steward",   used),
-    makePerson("person-5", "custodian", used),
-    makePerson("person-6", "custodian", used),
+    { ...makePerson("person-1", "owner",     used), avatarIndex: avatarPool[0] },
+    { ...makePerson("person-2", "owner",     used), avatarIndex: avatarPool[1] },
+    { ...makePerson("person-3", "steward",   used), avatarIndex: avatarPool[2] },
+    { ...makePerson("person-4", "steward",   used), avatarIndex: avatarPool[3] },
+    { ...makePerson("person-5", "custodian", used), avatarIndex: avatarPool[4] },
+    { ...makePerson("person-6", "custodian", used), avatarIndex: avatarPool[5] },
   ];
 }
