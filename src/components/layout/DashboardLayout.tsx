@@ -9,6 +9,8 @@ import { GovernancePanel } from "../governance/GovernancePanel";
 import { IncidentPanel } from "../incidents/IncidentPanel";
 import { ExecutivePressurePanel } from "../executive/ExecutivePressurePanel";
 import { PipelineActivity } from "../pipeline/PipelineActivity";
+import { EndScreen } from "../endgame/EndScreen";
+import { computeFinalScore } from "../../engine/scoringEngine";
 
 const styles = {
   root: {
@@ -138,6 +140,12 @@ export function DashboardLayout() {
   const incidents          = useGameStore((s) => s.incidents);
   const executivePressures = useGameStore((s) => s.executivePressures);
   const datasets           = useGameStore((s) => s.datasets);
+  const gamePhase          = useGameStore((s) => s.gamePhase);
+  const endSession         = useGameStore((s) => s.endSession);
+
+  // Live score computed from current state
+  const fullState  = useGameStore((s) => s);
+  const liveScore  = computeFinalScore(fullState).overallScore;
 
   const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
 
@@ -156,11 +164,18 @@ export function DashboardLayout() {
     Math.round(reputation) > 40 ? "#00bfff" :
     Math.round(reputation) > 15 ? "#ffa500" : "#ff4444";
 
+  const scoreColor =
+    liveScore >= 72 ? "#00ff88" :
+    liveScore >= 50 ? "#ffa500" : "#ff4444";
+
   return (
     <div style={styles.root}>
+      {gamePhase === "ended" && <EndScreen />}
+
       {/* Top Bar */}
       <div style={styles.topBar}>
         <div style={styles.title}>Medallion Control Room</div>
+        <StatBadge label="Score"       value={liveScore}              color={scoreColor} />
         <StatBadge label="Tick"        value={tick}                   color="#c0c0c0" />
         <StatBadge label="Trust"       value={trustScore}             color={trustColor} />
         <StatBadge label="Reputation"  value={Math.round(reputation)} color={repColor} />
@@ -241,6 +256,24 @@ export function DashboardLayout() {
       {/* Bottom Bar */}
       <div style={styles.bottomBar}>
         <TickButton />
+        <button
+          onClick={endSession}
+          style={{
+            marginLeft: "12px",
+            background: "transparent",
+            border: "1px solid #1e1e1e",
+            color: "#333",
+            fontFamily: "'Courier New', Courier, monospace",
+            fontSize: "11px",
+            padding: "6px 16px",
+            borderRadius: "2px",
+            cursor: "pointer",
+            letterSpacing: "0.06em",
+            textTransform: "uppercase" as const,
+          }}
+        >
+          End Session
+        </button>
       </div>
     </div>
   );

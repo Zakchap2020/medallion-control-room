@@ -2,11 +2,11 @@ export type Department = "Finance" | "Sales" | "Marketing" | "HR" | "Operations"
 export type DataLayer  = "bronze" | "silver" | "gold";
 
 export interface DatasetQuality {
-  accuracy:     number; // correctness, 0–100
-  completeness: number; // no missing values, 0–100
-  consistency:  number; // schema / format coherence, 0–100
-  uniqueness:   number; // no duplicates, 0–100
-  timeliness:   number; // data currency, 0–100
+  accuracy:     number;
+  completeness: number;
+  consistency:  number;
+  uniqueness:   number;
+  timeliness:   number;
 }
 
 export interface Dataset {
@@ -22,10 +22,7 @@ export interface Dataset {
 export interface Analyst {
   id: string;
   name: string;
-  skills: {
-    analysis: number;
-    governance: number;
-  };
+  skills: { analysis: number; governance: number };
   assignedDepartment?: Department;
   active: boolean;
 }
@@ -69,11 +66,7 @@ export interface Person {
   id: string;
   name: string;
   roleType: PersonRoleType;
-  skills: {
-    governance: number;
-    analysis: number;
-    engineering: number;
-  };
+  skills: { governance: number; analysis: number; engineering: number };
 }
 
 export interface CatalogueEntry {
@@ -153,6 +146,32 @@ export interface HealingEvent {
   note?: string;
 }
 
+// ── Phase 6 ──────────────────────────────────────────────────────────────────
+
+export interface FinalScore {
+  dataTrustScore:             number; // 0–100
+  governanceMaturityScore:    number;
+  operationalStabilityScore:  number;
+  executiveSatisfactionScore: number;
+  overallScore:               number; // weighted composite
+}
+
+export type EndgameArchetype =
+  | "mature_data_driven"
+  | "technically_stable_politically_fragile"
+  | "operationally_chaotic"
+  | "governance_failure"
+  | "self_healing_illusion";
+
+export interface Achievement {
+  id: string;
+  label: string;
+  description: string;
+  unlocked: boolean;
+}
+
+export type GamePhase = "playing" | "ended";
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface GameState {
@@ -168,4 +187,7 @@ export interface GameState {
   tick: number;
   trustScore: number;
   reputation: number;
+  // Phase 6
+  gamePhase: GamePhase;
+  peakTrustScore: number;
 }

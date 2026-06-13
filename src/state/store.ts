@@ -5,6 +5,7 @@ import type {
   Person,
   Department,
   PersonRoleType,
+  GamePhase,
 } from "../models/types";
 
 import { runTick } from "../engine/runTick";
@@ -35,9 +36,13 @@ interface GameStore extends GameState {
   assignAnalystToIncident: (incidentId: string) => void;
   completeExecutivePressure: (pressureId: string) => void;
   toggleAutoFix: (datasetId: string) => void;
+  // Phase 6
+  endSession: () => void;
+  continueSession: () => void;
+  resetGame: () => void;
 }
 
-export const useGameStore = create<GameStore>((set, get) => ({
+const INITIAL_GAME_STATE: GameState = {
   datasets: [],
   analysts: INITIAL_ANALYSTS,
   persons: INITIAL_PERSONS,
@@ -50,6 +55,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
   tick: 0,
   trustScore: 0,
   reputation: 50,
+  gamePhase: "playing" as GamePhase,
+  peakTrustScore: 0,
+};
+
+export const useGameStore = create<GameStore>((set, get) => ({
+  ...INITIAL_GAME_STATE,
 
   runTick: () => {
     const state = get();
@@ -149,5 +160,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
         d.id === datasetId ? { ...d, autoFixEnabled: !d.autoFixEnabled } : d
       ),
     }));
+  },
+
+  endSession: () => {
+    set({ gamePhase: "ended" as GamePhase });
+  },
+
+  continueSession: () => {
+    set({ gamePhase: "playing" as GamePhase });
+  },
+
+  resetGame: () => {
+    set({ ...INITIAL_GAME_STATE });
   },
 }));

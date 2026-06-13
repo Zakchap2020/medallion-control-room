@@ -116,6 +116,10 @@ export function runTick(state: GameState): Partial<GameState> {
     Math.min(100, state.reputation + reputationDelta + reputationDrift)
   );
 
+  // 10. Session tracking (Phase 6)
+  const peakTrustScore = Math.max(state.peakTrustScore, trustScore);
+  const gamePhase = trustScore < -20 ? ("ended" as const) : state.gamePhase;
+
   return {
     tick: nextTick,
     datasets: promotedDatasets,
@@ -127,5 +131,7 @@ export function runTick(state: GameState): Partial<GameState> {
     healingEvents: allHealingEvents,
     trustScore,
     reputation,
+    peakTrustScore,
+    gamePhase,
   };
 }
