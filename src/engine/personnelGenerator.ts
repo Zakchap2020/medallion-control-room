@@ -1,4 +1,4 @@
-import type { Person, PersonRoleType, PersonTrait } from "../models/types";
+import type { Person, PersonRoleType, PersonTrait, Analyst } from "../models/types";
 
 const FIRST_NAMES = [
   "Amara", "Yuki", "Carlos", "Priya", "Jordan", "Sam", "Maya", "Chris",
@@ -88,8 +88,30 @@ function makePerson(
   };
 }
 
-export function generatePersonnel(): Person[] {
-  const used = new Set<string>();
+export function generateAnalysts(used: Set<string> = new Set()): Analyst[] {
+  return [
+    {
+      id: "analyst-1",
+      name: pickName(used),
+      skills: { analysis: rnd(6, 9), governance: rnd(4, 7) },
+      active: true,
+    },
+    {
+      id: "analyst-2",
+      name: pickName(used),
+      skills: { analysis: rnd(4, 7), governance: rnd(6, 9) },
+      active: true,
+    },
+    {
+      id: "analyst-3",
+      name: pickName(used),
+      skills: { analysis: rnd(5, 8), governance: rnd(5, 8) },
+      active: true,
+    },
+  ];
+}
+
+export function generatePersonnel(used: Set<string> = new Set()): Person[] {
   return [
     makePerson("person-1", "owner",     used),
     makePerson("person-2", "owner",     used),

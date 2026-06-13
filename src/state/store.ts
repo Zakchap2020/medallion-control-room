@@ -10,13 +10,8 @@ import type {
 
 import { runTick } from "../engine/runTick";
 import { compositeQuality } from "../engine/medallionEngine";
-import { generatePersonnel } from "../engine/personnelGenerator";
+import { generatePersonnel, generateAnalysts } from "../engine/personnelGenerator";
 
-const INITIAL_ANALYSTS: Analyst[] = [
-  { id: "analyst-1", name: "Alice Morgan", skills: { analysis: 7, governance: 5 }, active: true },
-  { id: "analyst-2", name: "Ben Okafor",   skills: { analysis: 5, governance: 8 }, active: true },
-  { id: "analyst-3", name: "Priya Shah",   skills: { analysis: 6, governance: 6 }, active: true },
-];
 
 interface GameStore extends GameState {
   runTick: () => void;
@@ -38,10 +33,13 @@ interface GameStore extends GameState {
 }
 
 function createInitialState(): GameState {
+  const usedNames = new Set<string>();
+  const persons   = generatePersonnel(usedNames);
+  const analysts  = generateAnalysts(usedNames);
   return {
     datasets: [],
-    analysts: INITIAL_ANALYSTS,
-    persons: generatePersonnel(),
+    analysts,
+    persons,
     silos: [],
     signals: [],
     catalogue: {},
