@@ -214,7 +214,7 @@ export function EndScreen() {
         }}>
           <div>
             <div style={{ fontSize: "9px", color: "#333", textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: "3px" }}>
-              Medallion Control Room — Assessment Report
+              Medallion Protocol — Assessment Report
             </div>
             <div style={{ fontSize: "13px", color: "#555", letterSpacing: "0.04em" }}>
               Tick {state.tick} &nbsp;|&nbsp; Peak Trust {state.peakTrustScore}

@@ -258,7 +258,7 @@ export function DashboardLayout() {
 
       {/* ── Top Bar ── */}
       <div style={styles.topBar}>
-        <div style={styles.title}>⬡ Medallion Control Room</div>
+        <div style={styles.title}>⬡ Medallion Protocol</div>
         <StatBadge label="Score"      value={liveScore}    color={scoreColor} />
         <Sep />
         <StatBadge label="Tick"       value={tick}         color="#555"      animKey={tick} />
