@@ -4,20 +4,20 @@ import type { HealingEvent } from "../../models/types";
 const ACTION_LABELS: Record<string, string> = {
   clean_nulls:               "Null Cleanse",
   deduplicate:               "Deduplication",
-  standardise_schema:        "Schema Standardise",
+  standardise_schema:        "Schema Std",
   aggregate:                 "Aggregation",
-  validate_governance_rules: "Governance Validate",
-  auto_promoted:             "▲ Layer Promoted",
+  validate_governance_rules: "Gov Validate",
+  auto_promoted:             "▲ Promoted",
 };
 
 const LAYER_COLORS: Record<string, string> = {
   "Bronze → Silver": "#c0832a",
-  "Silver → Gold":   "#ffd700",
+  "Silver → Gold":   "#c8a800",
 };
 
 function EventRow({ event }: { event: HealingEvent }) {
   const isPromotion = event.action === "auto_promoted";
-  const noteColor = LAYER_COLORS[event.note ?? ""] ?? (event.success ? "#00ff88" : "#ff4444");
+  const noteColor   = LAYER_COLORS[event.note ?? ""] ?? (event.success ? "#00ff88" : "#ff4444");
 
   return (
     <div style={{
@@ -25,30 +25,33 @@ function EventRow({ event }: { event: HealingEvent }) {
       alignItems: "center",
       gap: "6px",
       padding: "3px 0",
-      borderBottom: "1px solid #111",
-      fontSize: "10px",
+      borderBottom: "1px solid #0d0d0d",
+      fontSize: "9px",
     }}>
-      {/* Success indicator */}
+      {/* Status dot */}
       <span style={{
         width: "5px",
         height: "5px",
         borderRadius: "50%",
         background: event.success ? "#00ff88" : "#ff4444",
         flexShrink: 0,
+        display: "inline-block",
+        opacity: 0.7,
       }} />
 
       {/* Action label */}
       <span style={{
-        color: isPromotion ? noteColor : event.success ? "#666" : "#ff4444",
+        color: isPromotion ? noteColor : event.success ? "#444" : "#ff4444",
         fontWeight: isPromotion ? "bold" : "normal",
-        minWidth: "128px",
+        minWidth: "100px",
+        letterSpacing: "0.03em",
       }}>
         {ACTION_LABELS[event.action] ?? event.action}
       </span>
 
       {/* Dataset name */}
       <span style={{
-        color: "#333",
+        color: "#222",
         fontFamily: "monospace",
         flex: 1,
         overflow: "hidden",
@@ -58,8 +61,8 @@ function EventRow({ event }: { event: HealingEvent }) {
         {event.datasetName}
       </span>
 
-      {/* Note / quality delta */}
-      <span style={{ color: noteColor, flexShrink: 0 }}>
+      {/* Delta / note */}
+      <span style={{ color: noteColor, flexShrink: 0, fontFamily: "monospace" }}>
         {event.note
           ? event.note
           : event.qualityDelta !== 0
@@ -68,7 +71,7 @@ function EventRow({ event }: { event: HealingEvent }) {
       </span>
 
       {/* Tick */}
-      <span style={{ color: "#1e1e1e", fontSize: "9px", flexShrink: 0 }}>
+      <span style={{ color: "#1a1a1a", fontFamily: "monospace", flexShrink: 0 }}>
         T{event.tick}
       </span>
     </div>
@@ -83,36 +86,35 @@ export function PipelineActivity() {
   const silver = datasets.filter((d) => d.layer === "silver").length;
   const gold   = datasets.filter((d) => d.layer === "gold").length;
 
+  const promotions = healingEvents.filter((e) => e.action === "auto_promoted").length;
+  const failures   = healingEvents.filter((e) => !e.success).length;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-      {/* Header with pipeline counts */}
+      {/* Layer summary */}
       <div style={{
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
-        fontSize: "9px",
-        color: "#444",
-        textTransform: "uppercase",
-        letterSpacing: "0.12em",
-        marginBottom: "6px",
-        borderBottom: "1px solid #1a1a1a",
-        paddingBottom: "5px",
+        marginBottom: "7px",
         flexShrink: 0,
+        fontSize: "9px",
       }}>
-        <span>Pipeline Activity</span>
         <div style={{ display: "flex", gap: "10px" }}>
-          <span style={{ color: "#7a4a1e" }}>B:{bronze}</span>
-          <span style={{ color: "#666" }}>S:{silver}</span>
-          <span style={{ color: "#a08800" }}>G:{gold}</span>
+          <span style={{ color: "#4a2a0e" }}>B:{bronze}</span>
+          <span style={{ color: "#444" }}>S:{silver}</span>
+          <span style={{ color: gold > 0 ? "#a08800" : "#222" }}>G:{gold}</span>
+        </div>
+        <div style={{ display: "flex", gap: "10px", color: "#1e1e1e" }}>
+          {promotions > 0 && <span style={{ color: "#c8a80066" }}>{promotions}↑</span>}
+          {failures   > 0 && <span style={{ color: "#ff444444" }}>{failures}✗</span>}
         </div>
       </div>
 
       {/* Event feed */}
       <div style={{ flex: 1, overflowY: "auto" }}>
         {healingEvents.length === 0 && (
-          <div style={{ color: "#1e1e1e", fontSize: "10px", paddingTop: "4px" }}>
-            Auto-fix initialising…
-          </div>
+          <div style={{ color: "#1a1a1a", fontSize: "10px" }}>Auto-fix not yet active.</div>
         )}
         {healingEvents.map((e) => (
           <EventRow key={e.id} event={e} />

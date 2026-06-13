@@ -1,146 +1,177 @@
 import { useGameStore } from "../../state/store";
+import { showToast } from "../ui/ToastStack";
 
 const SEVERITY_COLORS = {
-  low: "#ffd700",
+  low:    "#ffd700",
   medium: "#ffa500",
-  high: "#ff4444",
+  high:   "#ff4444",
 };
 
 const DEPT_COLORS: Record<string, string> = {
-  Finance: "#ffd700",
-  Sales: "#00bfff",
-  Marketing: "#ff69b4",
-  HR: "#98fb98",
+  Finance:    "#ffd700",
+  Sales:      "#00bfff",
+  Marketing:  "#ff69b4",
+  HR:         "#98fb98",
   Operations: "#ffa500",
 };
 
 const TYPE_LABELS: Record<string, string> = {
-  inconsistency_detected:    "Data Inconsistency",
-  shadow_dataset_detected:   "Shadow Dataset",
-  schema_drift:              "Schema Drift",
-  duplicate_data_suspected:  "Duplicate Data",
-  missing_owner:             "⚠ Missing Owner",
-  governance_risk_escalating: "⚠ Governance Risk",
+  inconsistency_detected:     "Data Inconsistency",
+  shadow_dataset_detected:    "Shadow Dataset",
+  schema_drift:               "Schema Drift",
+  duplicate_data_suspected:   "Duplicate Data",
+  missing_owner:              "Missing Owner",
+  governance_risk_escalating: "Governance Risk ↑",
+};
+
+const TYPE_ICONS: Record<string, string> = {
+  inconsistency_detected:     "≠",
+  shadow_dataset_detected:    "◈",
+  schema_drift:               "⟳",
+  duplicate_data_suspected:   "⊕",
+  missing_owner:              "⚠",
+  governance_risk_escalating: "⬡",
 };
 
 export function SignalFeed() {
-  const signals = useGameStore((s) => s.signals);
+  const signals           = useGameStore((s) => s.signals);
+  const tick              = useGameStore((s) => s.tick);
   const investigateSignal = useGameStore((s) => s.investigateSignal);
-  const resolveSignal = useGameStore((s) => s.resolveSignal);
+  const resolveSignal     = useGameStore((s) => s.resolveSignal);
 
-  const unresolved = [...signals].filter((s) => !s.resolved).reverse().slice(0, 8);
+  const unresolved = [...signals]
+    .filter((s) => !s.resolved)
+    .sort((a, b) => {
+      const sOrder = { high: 0, medium: 1, low: 2 };
+      return sOrder[a.severity] - sOrder[b.severity];
+    })
+    .slice(0, 10);
+
   const unresolvedCount = signals.filter((s) => !s.resolved).length;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-      <div
-        style={{
-          fontSize: "10px",
-          color: "#444",
-          textTransform: "uppercase",
-          letterSpacing: "0.12em",
-          marginBottom: "6px",
-          borderBottom: "1px solid #1a1a1a",
-          paddingBottom: "5px",
-          display: "flex",
-          justifyContent: "space-between",
-          flexShrink: 0,
-        }}
-      >
-        <span>Signal Feed</span>
-        {unresolvedCount > 0 && (
-          <span style={{ color: "#ff4444" }}>{unresolvedCount} unresolved</span>
-        )}
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "7px", flexShrink: 0 }}>
+        <div style={{ fontSize: "9px" }}>
+          {unresolvedCount > 10 && (
+            <span style={{ color: "#2a2a2a" }}>showing 10 of {unresolvedCount}</span>
+          )}
+          {unresolvedCount === 0 && (
+            <span style={{ color: "#1a1a1a" }}>
+              No active signals — assign analysts to departments to monitor
+            </span>
+          )}
+        </div>
       </div>
 
-      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "3px" }}>
-        {unresolved.length === 0 && (
-          <div style={{ color: "#2a2a2a", fontSize: "11px", paddingTop: "6px" }}>
-            No signals. Assign analysts to departments to begin monitoring.
-          </div>
-        )}
+      {/* Signal cards */}
+      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "4px" }}>
+        {unresolved.map((signal) => {
+          const color    = SEVERITY_COLORS[signal.severity];
+          const age      = tick - signal.tick;
+          const isStale  = age >= 3;
 
-        {unresolved.map((signal) => (
-          <div
-            key={signal.id}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              background: "#0f0f0f",
-              border: "1px solid #181818",
-              borderLeft: `2px solid ${SEVERITY_COLORS[signal.severity]}`,
-              borderRadius: "2px",
-              padding: "5px 8px",
-              fontSize: "11px",
-            }}
-          >
-            <span
+          return (
+            <div
+              key={signal.id}
+              className="anim-row-appear"
               style={{
-                color: SEVERITY_COLORS[signal.severity],
-                fontWeight: "bold",
-                textTransform: "uppercase",
-                fontSize: "9px",
-                minWidth: "40px",
+                background: isStale ? "#110a00" : "#0d0d0d",
+                border: `1px solid ${color}18`,
+                borderLeft: `3px solid ${color}`,
+                borderRadius: "3px",
+                padding: "6px 9px",
               }}
             >
-              {signal.severity}
-            </span>
-            <span style={{ color: "#c0c0c0", flex: 1 }}>
-              {TYPE_LABELS[signal.type]}
-            </span>
-            <span
-              style={{
-                color: DEPT_COLORS[signal.department] ?? "#555",
-                minWidth: "76px",
-                fontSize: "10px",
-              }}
-            >
-              {signal.department}
-            </span>
-            <span style={{ color: "#333", fontSize: "9px", minWidth: "28px" }}>
-              T{signal.tick}
-            </span>
-            <div style={{ display: "flex", gap: "4px" }}>
-              {signal.relatedSiloId && (
-                <button
-                  onClick={() => investigateSignal(signal.id)}
-                  style={{
-                    background: "transparent",
-                    border: "1px solid #ffa500",
-                    color: "#ffa500",
+              {/* Row 1: icon + type + severity badge */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                  <span style={{ color, fontSize: "10px" }}>
+                    {TYPE_ICONS[signal.type] ?? "●"}
+                  </span>
+                  <span style={{ color: "#c0c0c0", fontSize: "10px" }}>
+                    {TYPE_LABELS[signal.type]}
+                  </span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{
+                    fontSize: "8px",
+                    color,
+                    border: `1px solid ${color}33`,
                     borderRadius: "2px",
-                    padding: "2px 8px",
-                    fontSize: "9px",
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.04em",
-                  }}
-                >
-                  Investigate
-                </button>
-              )}
-              <button
-                onClick={() => resolveSignal(signal.id)}
-                style={{
-                  background: "transparent",
-                  border: "1px solid #2a2a2a",
-                  color: "#444",
-                  borderRadius: "2px",
-                  padding: "2px 8px",
-                  fontSize: "9px",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  textTransform: "uppercase",
-                }}
-              >
-                Dismiss
-              </button>
+                    padding: "1px 5px",
+                    letterSpacing: "0.05em",
+                    fontWeight: "bold",
+                  }}>
+                    {signal.severity.toUpperCase()}
+                  </span>
+                </div>
+              </div>
+
+              {/* Row 2: dept chip + age + actions */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                  <span style={{
+                    fontSize: "8px",
+                    color: DEPT_COLORS[signal.department] ?? "#555",
+                    border: "1px solid #1a1a1a",
+                    borderRadius: "2px",
+                    padding: "1px 5px",
+                  }}>
+                    {signal.department}
+                  </span>
+                  <span style={{
+                    fontSize: "8px",
+                    color: isStale ? "#cc4400" : "#222",
+                    fontFamily: "monospace",
+                  }}>
+                    {age === 0 ? "just now" : `${age}T ago`}
+                    {isStale && " ⚠"}
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: "3px" }}>
+                  {signal.relatedSiloId && (
+                    <button
+                      onClick={() => {
+                        investigateSignal(signal.id);
+                        showToast("Signal investigated — silo discovered", "warning");
+                      }}
+                      style={sigBtnStyle("#ffa500")}
+                    >
+                      Investigate
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      resolveSignal(signal.id);
+                      showToast("Signal dismissed", "info");
+                    }}
+                    style={sigBtnStyle("#333")}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
+}
+
+function sigBtnStyle(color: string) {
+  return {
+    background: "transparent",
+    border: `1px solid ${color}55`,
+    color,
+    borderRadius: "2px",
+    padding: "2px 7px",
+    fontSize: "8px",
+    cursor: "pointer",
+    fontFamily: "inherit",
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.04em",
+  };
 }

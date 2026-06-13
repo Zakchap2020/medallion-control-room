@@ -1,16 +1,18 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useGameStore } from "../../state/store";
 import { DatasetCatalogue } from "../catalogue/DatasetCatalogue";
 import { TickButton } from "../controls/TickButton";
 import { AnalystPanel } from "../analysts/AnalystPanel";
 import { SiloPanel } from "../silos/SiloPanel";
-import { SignalFeed } from "../signals/SignalFeed";
 import { GovernancePanel } from "../governance/GovernancePanel";
-import { IncidentPanel } from "../incidents/IncidentPanel";
-import { ExecutivePressurePanel } from "../executive/ExecutivePressurePanel";
-import { PipelineActivity } from "../pipeline/PipelineActivity";
+import { BottomFeed } from "../feed/BottomFeed";
 import { EndScreen } from "../endgame/EndScreen";
+import { ToastStack } from "../ui/ToastStack";
 import { computeFinalScore } from "../../engine/scoringEngine";
+
+// ── Shared visual tokens ─────────────────────────────────────────────────────
+
+const FONT = "'Courier New', Courier, monospace";
 
 const styles = {
   root: {
@@ -19,40 +21,27 @@ const styles = {
     height: "100vh",
     background: "#0a0a0a",
     color: "#c0c0c0",
-    fontFamily: "'Courier New', Courier, monospace",
+    fontFamily: FONT,
     fontSize: "13px",
+    position: "relative" as const,
   },
   topBar: {
     display: "flex",
     alignItems: "center",
-    gap: "24px",
-    padding: "8px 20px",
-    background: "#0d0d0d",
-    borderBottom: "1px solid #1e1e1e",
+    gap: "20px",
+    padding: "0 20px",
+    height: "44px",
+    background: "#070707",
+    borderBottom: "1px solid #161616",
     flexShrink: 0,
   },
   title: {
-    fontSize: "12px",
-    fontWeight: "bold",
+    fontSize: "11px",
+    fontWeight: "bold" as const,
     color: "#00ff88",
-    letterSpacing: "0.08em",
+    letterSpacing: "0.1em",
     textTransform: "uppercase" as const,
     flex: 1,
-  },
-  stat: {
-    display: "flex",
-    flexDirection: "column" as const,
-    alignItems: "center" as const,
-  },
-  statLabel: {
-    fontSize: "8px",
-    color: "#555",
-    textTransform: "uppercase" as const,
-    letterSpacing: "0.1em",
-  },
-  statValue: {
-    fontSize: "17px",
-    fontWeight: "bold",
   },
   panels: {
     display: "flex",
@@ -60,23 +49,12 @@ const styles = {
     overflow: "hidden",
   },
   leftPanel: {
-    width: "290px",
+    width: "280px",
     flexShrink: 0,
-    borderRight: "1px solid #1e1e1e",
-    padding: "10px",
+    borderRight: "1px solid #161616",
     display: "flex",
     flexDirection: "column" as const,
     overflow: "hidden",
-  },
-  panelHeader: {
-    fontSize: "9px",
-    color: "#444",
-    textTransform: "uppercase" as const,
-    letterSpacing: "0.12em",
-    marginBottom: "7px",
-    borderBottom: "1px solid #1a1a1a",
-    paddingBottom: "5px",
-    flexShrink: 0,
   },
   centerPanel: {
     flex: 1,
@@ -86,49 +64,86 @@ const styles = {
     minWidth: 0,
   },
   rightPanel: {
-    width: "260px",
+    width: "264px",
     flexShrink: 0,
-    borderLeft: "1px solid #1e1e1e",
-    padding: "10px",
+    borderLeft: "1px solid #161616",
     display: "flex",
     flexDirection: "column" as const,
-    overflowY: "auto" as const,
-  },
-  divider: {
-    borderTop: "1px solid #1a1a1a",
-    margin: "10px 0",
-    flexShrink: 0,
+    overflow: "hidden",
   },
   bottomZone: {
-    height: "200px",
+    height: "216px",
     flexShrink: 0,
-    borderTop: "1px solid #1e1e1e",
-    display: "flex",
+    borderTop: "1px solid #161616",
     background: "#080808",
+    overflow: "hidden",
   },
   bottomBar: {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: "10px 20px",
-    background: "#0d0d0d",
-    borderTop: "1px solid #1e1e1e",
+    gap: "10px",
+    padding: "8px 20px",
+    background: "#070707",
+    borderTop: "1px solid #161616",
     flexShrink: 0,
   },
+  panelHeader: {
+    fontSize: "9px",
+    color: "#383838",
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.14em",
+    borderBottom: "1px solid #141414",
+    padding: "7px 10px",
+    flexShrink: 0,
+  },
+  divider: { borderTop: "1px solid #141414", flexShrink: 0 },
 };
 
+// ── Stat badge in top bar ────────────────────────────────────────────────────
+
 function StatBadge({
-  label, value, color,
+  label, value, color, blink = false, animKey,
 }: {
-  label: string; value: number | string; color: string;
+  label: string;
+  value: string | number;
+  color: string;
+  blink?: boolean;
+  animKey?: string | number;
 }) {
   return (
-    <div style={styles.stat}>
-      <span style={styles.statLabel}>{label}</span>
-      <span style={{ ...styles.statValue, color }}>{value}</span>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <span style={{
+        fontSize: "8px",
+        color: "#383838",
+        textTransform: "uppercase" as const,
+        letterSpacing: "0.12em",
+      }}>
+        {label}
+      </span>
+      <span
+        key={animKey}
+        className={[
+          blink ? "anim-urgent-blink" : "",
+          animKey !== undefined ? "anim-num-pop" : "",
+        ].join(" ").trim()}
+        style={{ fontSize: "16px", fontWeight: "bold", color, lineHeight: 1.2 }}
+      >
+        {value}
+      </span>
     </div>
   );
 }
+
+// ── Separator ────────────────────────────────────────────────────────────────
+
+function Sep() {
+  return (
+    <div style={{ width: "1px", height: "24px", background: "#181818", flexShrink: 0 }} />
+  );
+}
+
+// ── Main layout ──────────────────────────────────────────────────────────────
 
 export function DashboardLayout() {
   const tick               = useGameStore((s) => s.tick);
@@ -143,133 +158,165 @@ export function DashboardLayout() {
   const gamePhase          = useGameStore((s) => s.gamePhase);
   const endSession         = useGameStore((s) => s.endSession);
 
-  // Live score computed from current state
+  // Live overall score
   const fullState  = useGameStore((s) => s);
   const liveScore  = computeFinalScore(fullState).overallScore;
 
+  // Reputation trend — compare across renders
+  const prevRepRef   = useRef<number>(reputation);
+  const [repTrend, setRepTrend] = useState<"up" | "down" | "flat">("flat");
+  useEffect(() => {
+    if (reputation > prevRepRef.current) setRepTrend("up");
+    else if (reputation < prevRepRef.current) setRepTrend("down");
+    prevRepRef.current = reputation;
+  }, [reputation]);
+
   const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
 
-  const activeSiloCount    = silos.filter((s) => s.discovered && !s.contained).length;
-  const unresolvedSignals  = signals.filter((s) => !s.resolved).length;
-  const ungoverned         = Object.values(catalogue).filter((e) => !e.ownerId).length;
-  const activeIncidents    = incidents.filter((i) => i.status === "open" || i.status === "in_progress").length;
-  const activePressures    = executivePressures.filter((p) => p.status === "pending").length;
-  const goldCount          = datasets.filter((d) => d.layer === "gold").length;
+  // Derived counts
+  const activeSiloCount   = silos.filter((s) => s.discovered && !s.contained).length;
+  const unresolvedSignals = signals.filter((s) => !s.resolved).length;
+  const ungoverned        = Object.values(catalogue).filter((e) => !e.ownerId).length;
+  const activeIncidents   = incidents.filter((i) => i.status === "open" || i.status === "in_progress").length;
+  const activePressures   = executivePressures.filter((p) => p.status === "pending").length;
+  const goldCount         = datasets.filter((d) => d.layer === "gold").length;
 
+  const criticalIncident = incidents.some(
+    (i) => (i.status === "open" || i.status === "in_progress") && i.severity === "critical"
+  );
+  const urgentPressure = executivePressures.some(
+    (p) => p.status === "pending" && (p.urgency === "critical" || p.urgency === "high")
+  );
+
+  // Colour helpers
   const trustColor =
-    trustScore > 40 ? "#00ff88" :
-    trustScore > 15 ? "#ffa500" : "#ff4444";
-
+    trustScore > 40 ? "#00ff88" : trustScore > 10 ? "#ffa500" : "#ff4444";
   const repColor =
-    Math.round(reputation) > 40 ? "#00bfff" :
-    Math.round(reputation) > 15 ? "#ffa500" : "#ff4444";
-
+    Math.round(reputation) > 50 ? "#00bfff" :
+    Math.round(reputation) > 25 ? "#ffa500" : "#ff4444";
   const scoreColor =
-    liveScore >= 72 ? "#00ff88" :
-    liveScore >= 50 ? "#ffa500" : "#ff4444";
+    liveScore >= 72 ? "#00ff88" : liveScore >= 50 ? "#ffa500" : "#ff4444";
+  const repDisplay = `${Math.round(reputation)}${repTrend === "up" ? " ↑" : repTrend === "down" ? " ↓" : ""}`;
+
+  // Very subtle screen glow when there are urgent executive demands
+  const glowStyle = urgentPressure
+    ? { boxShadow: "inset 0 0 80px rgba(255, 102, 0, 0.035)" }
+    : {};
 
   return (
-    <div style={styles.root}>
+    <div style={{ ...styles.root, ...glowStyle }}>
       {gamePhase === "ended" && <EndScreen />}
+      <ToastStack />
 
-      {/* Top Bar */}
+      {/* ── Top Bar ── */}
       <div style={styles.topBar}>
-        <div style={styles.title}>Medallion Control Room</div>
-        <StatBadge label="Score"       value={liveScore}              color={scoreColor} />
-        <StatBadge label="Tick"        value={tick}                   color="#c0c0c0" />
-        <StatBadge label="Trust"       value={trustScore}             color={trustColor} />
-        <StatBadge label="Reputation"  value={Math.round(reputation)} color={repColor} />
-        <StatBadge label="Incidents"   value={activeIncidents}   color={activeIncidents   > 0 ? "#ff4444" : "#2a2a2a"} />
-        <StatBadge label="Pressure"    value={activePressures}   color={activePressures   > 0 ? "#ff6600" : "#2a2a2a"} />
-        <StatBadge label="Silos"       value={activeSiloCount}   color={activeSiloCount   > 0 ? "#ff4444" : "#2a2a2a"} />
-        <StatBadge label="Signals"     value={unresolvedSignals} color={unresolvedSignals > 0 ? "#ffa500" : "#2a2a2a"} />
-        <StatBadge label="Ungoverned"  value={ungoverned}        color={ungoverned > 3 ? "#ff4444" : ungoverned > 0 ? "#ffa500" : "#2a2a2a"} />
-        <StatBadge label="Gold"        value={goldCount}         color={goldCount > 0 ? "#c8a800" : "#2a2a2a"} />
+        <div style={styles.title}>⬡ Medallion Control Room</div>
+
+        <StatBadge label="Score"      value={liveScore}              color={scoreColor} />
+        <Sep />
+        <StatBadge label="Tick"       value={tick}                   color="#666"      animKey={tick} />
+        <StatBadge label="Trust"      value={trustScore}             color={trustColor} animKey={`t${tick}`} />
+        <StatBadge label="Reputation" value={repDisplay}             color={repColor} />
+        <Sep />
+        <StatBadge label="Incidents"  value={activeIncidents}  color={activeIncidents  > 0 ? "#ff4444" : "#1e1e1e"} blink={criticalIncident} />
+        <StatBadge label="Pressure"   value={activePressures}  color={activePressures  > 0 ? "#ff6600" : "#1e1e1e"} blink={urgentPressure} />
+        <StatBadge label="Silos"      value={activeSiloCount}  color={activeSiloCount  > 0 ? "#ff4444" : "#1e1e1e"} />
+        <StatBadge label="Signals"    value={unresolvedSignals} color={unresolvedSignals > 0 ? "#ffd700" : "#1e1e1e"} />
+        <Sep />
+        <StatBadge label="Ungoverned" value={ungoverned}  color={ungoverned > 3 ? "#ff4444" : ungoverned > 0 ? "#ffa500" : "#1e1e1e"} />
+        <StatBadge label="Gold"       value={goldCount}   color={goldCount > 0 ? "#c8a800" : "#1e1e1e"} />
       </div>
 
-      {/* Main Panels */}
+      {/* ── Main panels ── */}
       <div style={styles.panels}>
-        {/* Left: Dataset Catalogue */}
+        {/* Left: Catalogue */}
         <div style={styles.leftPanel}>
           <div style={styles.panelHeader}>Dataset Catalogue</div>
-          <DatasetCatalogue selectedId={selectedDatasetId} onSelect={setSelectedDatasetId} />
+          <div style={{ flex: 1, overflow: "hidden", padding: "6px 8px" }}>
+            <DatasetCatalogue selectedId={selectedDatasetId} onSelect={setSelectedDatasetId} />
+          </div>
         </div>
 
-        {/* Center: Silo Monitor + Executive Pressure */}
+        {/* Center: Silo Monitor */}
         <div style={styles.centerPanel}>
-          <div style={{ flex: 1, overflow: "hidden" }}>
-            <SiloPanel />
-          </div>
-          <div style={{
-            height: "190px",
-            flexShrink: 0,
-            borderTop: "1px solid #1e1e1e",
-            padding: "10px 12px",
-            background: "#090909",
-          }}>
-            <ExecutivePressurePanel />
-          </div>
+          <SiloPanel />
         </div>
 
-        {/* Right: Analysts + Governance */}
+        {/* Right: Monitoring + Dataset Inspector */}
         <div style={styles.rightPanel}>
-          <div style={styles.panelHeader}>Analyst Control</div>
-          <AnalystPanel />
+          {/* Analyst monitoring */}
+          <div style={styles.panelHeader}>
+            📡 Analyst Monitoring
+          </div>
+          <div style={{ padding: "8px", flexShrink: 0 }}>
+            <AnalystPanel />
+          </div>
+
           <div style={styles.divider} />
-          <div style={{ ...styles.panelHeader, marginBottom: "8px" }}>
-            Governance
+
+          {/* Dataset inspector (governance + quality) */}
+          <div style={{
+            ...styles.panelHeader,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}>
+            <span>
+              {selectedDatasetId ? "👥 Dataset Inspector" : "👥 Governance"}
+            </span>
             {selectedDatasetId && (
               <button
                 onClick={() => setSelectedDatasetId(null)}
                 style={{
-                  float: "right",
                   background: "none",
                   border: "none",
-                  color: "#444",
+                  color: "#2a2a2a",
                   cursor: "pointer",
                   fontSize: "9px",
-                  fontFamily: "inherit",
+                  fontFamily: FONT,
                   padding: 0,
                 }}
               >
-                ✕ clear
+                ✕
               </button>
             )}
           </div>
-          <GovernancePanel selectedDatasetId={selectedDatasetId} />
+          <div style={{ flex: 1, overflowY: "auto", padding: "8px" }}>
+            <GovernancePanel selectedDatasetId={selectedDatasetId} />
+          </div>
         </div>
       </div>
 
-      {/* Bottom Zone: Signal Feed | Incident Panel | Pipeline Activity */}
+      {/* ── Bottom feed (tabbed) ── */}
       <div style={styles.bottomZone}>
-        <div style={{ flex: 2, padding: "10px 12px", borderRight: "1px solid #1e1e1e", minWidth: 0 }}>
-          <SignalFeed />
-        </div>
-        <div style={{ flex: 2, padding: "10px 12px", borderRight: "1px solid #1e1e1e", minWidth: 0 }}>
-          <IncidentPanel />
-        </div>
-        <div style={{ flex: 1, padding: "10px 12px", minWidth: 0 }}>
-          <PipelineActivity />
-        </div>
+        <BottomFeed />
       </div>
 
-      {/* Bottom Bar */}
+      {/* ── Bottom bar ── */}
       <div style={styles.bottomBar}>
         <TickButton />
         <button
           onClick={endSession}
           style={{
-            marginLeft: "12px",
             background: "transparent",
             border: "1px solid #1e1e1e",
-            color: "#333",
-            fontFamily: "'Courier New', Courier, monospace",
-            fontSize: "11px",
+            color: "#2a2a2a",
+            fontFamily: FONT,
+            fontSize: "10px",
             padding: "6px 16px",
             borderRadius: "2px",
             cursor: "pointer",
-            letterSpacing: "0.06em",
+            letterSpacing: "0.07em",
             textTransform: "uppercase" as const,
+            transition: "color 0.15s, border-color 0.15s",
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.color = "#555";
+            (e.currentTarget as HTMLButtonElement).style.borderColor = "#333";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.color = "#2a2a2a";
+            (e.currentTarget as HTMLButtonElement).style.borderColor = "#1e1e1e";
           }}
         >
           End Session
