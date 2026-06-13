@@ -57,6 +57,7 @@ const INITIAL_GAME_STATE: GameState = {
   reputation: 50,
   gamePhase: "playing" as GamePhase,
   peakTrustScore: 0,
+  characterEvents: [],
 };
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -107,14 +108,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   assignGovernanceRole: (datasetId, role, personId) => {
     set((s) => {
-      const entry = s.catalogue[datasetId];
-      if (!entry) return {};
       const field =
         role === "owner" ? "ownerId" :
         role === "steward" ? "stewardId" : "custodianId";
-      return {
-        catalogue: { ...s.catalogue, [datasetId]: { ...entry, [field]: personId } },
-      };
+
+      // Scarcity: one person can only hold each role on one dataset at a time.
+      // Clear them from any other dataset before assigning here.
+      const updated: typeof s.catalogue = {};
+      for (const [id, entry] of Object.entries(s.catalogue)) {
+        if (id !== datasetId && personId && entry[field] === personId) {
+          updated[id] = { ...entry, [field]: undefined };
+        } else {
+          updated[id] = entry;
+        }
+      }
+
+      const target = updated[datasetId];
+      if (!target) return {};
+      updated[datasetId] = { ...target, [field]: personId };
+
+      return { catalogue: updated };
     });
   },
 

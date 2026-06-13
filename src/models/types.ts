@@ -190,4 +190,6 @@ export interface GameState {
   // Phase 6
   gamePhase: GamePhase;
   peakTrustScore: number;
+  // Character events (narrative moments referencing real people + datasets)
+  characterEvents: string[];
 }

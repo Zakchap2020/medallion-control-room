@@ -118,9 +118,12 @@ const ROLE_LABELS: Record<PersonRoleType, string> = {
 };
 
 const ROLE_DESC: Record<PersonRoleType, string> = {
-  owner:     "Accountable for meaning & correctness",
-  steward:   "Responsible for quality & consistency",
-  custodian: "Manages technical implementation",
+  owner:
+    "Accountable for business definition, policy compliance, and correct usage. Without an owner, accuracy decays and governance risk climbs unchecked each tick.",
+  steward:
+    "Enforces quality standards and business rules. Active stewards slow consistency decay and improve auto-fix outcomes. Required for Silver-layer data trust.",
+  custodian:
+    "Manages technical pipelines, schema, and access controls. Required for Bronze→Silver promotion. Without one, completeness decays and pipeline breaks go unpatched.",
 };
 
 const ROLE_TOAST: Record<PersonRoleType, string> = {
@@ -156,9 +159,29 @@ export function GovernancePanel({ selectedDatasetId }: Props) {
     { role: "custodian", currentId: entry.custodianId },
   ];
 
+  // Build occupied-person map per role (persons already assigned to OTHER datasets)
+  const getOccupied = (role: PersonRoleType): Map<string, string> => {
+    const field = role === "owner" ? "ownerId" : role === "steward" ? "stewardId" : "custodianId";
+    const map = new Map<string, string>();
+    Object.values(catalogue).forEach((e) => {
+      if (e.datasetId === selectedDatasetId) return;
+      const pid = e[field];
+      if (pid) map.set(pid, e.name);
+    });
+    return map;
+  };
+
   const handleAssign = (role: PersonRoleType, personId: string | undefined) => {
+    if (personId) {
+      const occupied = getOccupied(role);
+      if (occupied.has(personId)) {
+        const fromDs = occupied.get(personId)!;
+        showToast(`Reassigned from ${fromDs}`, "warning");
+      } else {
+        showToast(ROLE_TOAST[role]);
+      }
+    }
     assignGovernanceRole(selectedDatasetId, role, personId);
-    if (personId) showToast(ROLE_TOAST[role]);
   };
 
   return (
@@ -273,6 +296,7 @@ export function GovernancePanel({ selectedDatasetId }: Props) {
           {roleFields.map(({ role, currentId }) => {
             const eligible = persons.filter((p) => p.roleType === role);
             const current  = persons.find((p) => p.id === currentId);
+            const occupied = getOccupied(role);
             return (
               <div
                 key={role}
@@ -281,7 +305,7 @@ export function GovernancePanel({ selectedDatasetId }: Props) {
                   paddingLeft: "7px",
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "3px" }}>
                   <span style={{ fontSize: "9px", color: "#444", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                     {ROLE_LABELS[role]}
                   </span>
@@ -289,14 +313,16 @@ export function GovernancePanel({ selectedDatasetId }: Props) {
                     <span style={{ fontSize: "9px", color: "#00ff88" }}>✓ {current.name}</span>
                   )}
                 </div>
-                <div style={{ fontSize: "8px", color: "#222", marginBottom: "4px" }}>{ROLE_DESC[role]}</div>
+                <div style={{ fontSize: "8px", color: "#1e1e1e", marginBottom: "5px", lineHeight: "1.5" }}>
+                  {ROLE_DESC[role]}
+                </div>
                 <select
                   value={currentId ?? ""}
                   onChange={(e) => handleAssign(role, e.target.value || undefined)}
                   style={{
                     width: "100%",
                     background: "#090909",
-                    color: "#888",
+                    color: "#777",
                     border: "1px solid #1e1e1e",
                     borderRadius: "2px",
                     padding: "3px 5px",
@@ -306,11 +332,14 @@ export function GovernancePanel({ selectedDatasetId }: Props) {
                   }}
                 >
                   <option value="">— Unassigned —</option>
-                  {eligible.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} (gov:{p.skills.governance})
-                    </option>
-                  ))}
+                  {eligible.map((p) => {
+                    const onDataset = occupied.get(p.id);
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {p.name} (gov:{p.skills.governance}){onDataset ? ` — on: ${onDataset}` : ""}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             );

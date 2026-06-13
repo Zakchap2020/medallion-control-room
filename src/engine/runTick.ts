@@ -22,6 +22,7 @@ import {
   promoteDatasets,
   computeQualityTrustDelta,
 } from "./medallionEngine";
+import { generateCharacterEvent } from "./characterEngine";
 
 const MAX_HEALING_HISTORY = 40;
 
@@ -120,6 +121,17 @@ export function runTick(state: GameState): Partial<GameState> {
   const peakTrustScore = Math.max(state.peakTrustScore, trustScore);
   const gamePhase = trustScore < -20 ? ("ended" as const) : state.gamePhase;
 
+  // 11. Character events — narrative moments referencing real people + datasets
+  const stateForChar: GameState = {
+    ...state,
+    datasets: promotedDatasets,
+    catalogue: promotedCatalogue,
+  };
+  const charEvent = generateCharacterEvent(stateForChar);
+  const characterEvents = charEvent
+    ? [charEvent, ...state.characterEvents].slice(0, 30)
+    : state.characterEvents;
+
   return {
     tick: nextTick,
     datasets: promotedDatasets,
@@ -133,5 +145,6 @@ export function runTick(state: GameState): Partial<GameState> {
     reputation,
     peakTrustScore,
     gamePhase,
+    characterEvents,
   };
 }

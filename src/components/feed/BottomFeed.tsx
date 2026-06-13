@@ -4,8 +4,9 @@ import { IncidentPanel } from "../incidents/IncidentPanel";
 import { SignalFeed } from "../signals/SignalFeed";
 import { ExecutivePressurePanel } from "../executive/ExecutivePressurePanel";
 import { PipelineActivity } from "../pipeline/PipelineActivity";
+import { CharacterEventLog } from "../events/CharacterEventLog";
 
-type Tab = "incidents" | "signals" | "executive" | "pipeline";
+type Tab = "incidents" | "signals" | "executive" | "pipeline" | "events";
 
 interface TabDef {
   id: Tab;
@@ -13,6 +14,7 @@ interface TabDef {
   icon: string;
   count?: number;
   urgentColor?: string;
+  dim?: boolean;
 }
 
 export function BottomFeed() {
@@ -26,8 +28,10 @@ export function BottomFeed() {
   const unresSig    = signals.filter((s) => !s.resolved).length;
   const activePress = pressures.filter((p) => p.status === "pending").length;
 
-  const critInc   = incidents.some((i) => (i.status === "open" || i.status === "in_progress") && i.severity === "critical");
-  const urgPress  = pressures.some((p) => p.status === "pending" && (p.urgency === "critical" || p.urgency === "high"));
+  const characterEvents = useGameStore((s) => s.characterEvents);
+
+  const critInc  = incidents.some((i) => (i.status === "open" || i.status === "in_progress") && i.severity === "critical");
+  const urgPress = pressures.some((p) => p.status === "pending" && (p.urgency === "critical" || p.urgency === "high"));
 
   const tabs: TabDef[] = [
     {
@@ -55,6 +59,13 @@ export function BottomFeed() {
       id: "pipeline",
       icon: "↺",
       label: "Pipeline",
+    },
+    {
+      id: "events",
+      icon: "◎",
+      label: "Events",
+      count: characterEvents.length > 0 ? undefined : undefined,
+      dim: characterEvents.length === 0,
     },
   ];
 
@@ -129,6 +140,7 @@ export function BottomFeed() {
         {active === "signals"    && <SignalFeed />}
         {active === "executive"  && <ExecutivePressurePanel />}
         {active === "pipeline"   && <PipelineActivity />}
+        {active === "events"     && <CharacterEventLog />}
       </div>
     </div>
   );

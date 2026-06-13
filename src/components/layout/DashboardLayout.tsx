@@ -1,13 +1,12 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useGameStore } from "../../state/store";
 import { DatasetCatalogue } from "../catalogue/DatasetCatalogue";
-import { TickButton } from "../controls/TickButton";
 import { AnalystPanel } from "../analysts/AnalystPanel";
 import { SiloPanel } from "../silos/SiloPanel";
 import { GovernancePanel } from "../governance/GovernancePanel";
 import { BottomFeed } from "../feed/BottomFeed";
 import { EndScreen } from "../endgame/EndScreen";
-import { ToastStack } from "../ui/ToastStack";
+import { ToastStack, showToast } from "../ui/ToastStack";
 import { computeFinalScore } from "../../engine/scoringEngine";
 
 // ── Shared visual tokens ─────────────────────────────────────────────────────
@@ -156,11 +155,43 @@ export function DashboardLayout() {
   const executivePressures = useGameStore((s) => s.executivePressures);
   const datasets           = useGameStore((s) => s.datasets);
   const gamePhase          = useGameStore((s) => s.gamePhase);
+  const characterEvents    = useGameStore((s) => s.characterEvents);
   const endSession         = useGameStore((s) => s.endSession);
+  const storeRunTick       = useGameStore((s) => s.runTick);
 
   // Live overall score
   const fullState  = useGameStore((s) => s);
   const liveScore  = computeFinalScore(fullState).overallScore;
+
+  // ── Real-time game loop ─────────────────────────────────────────────────────
+  const [isRunning, setIsRunning]   = useState(false);
+  const [speed, setSpeed]           = useState<1 | 2 | 3>(1);
+  const SPEED_MS: Record<number, number> = { 1: 2200, 2: 1200, 3: 600 };
+
+  const runTick = useCallback(() => {
+    storeRunTick();
+  }, [storeRunTick]);
+
+  useEffect(() => {
+    if (!isRunning || gamePhase === "ended") return;
+    const id = setInterval(runTick, SPEED_MS[speed]);
+    return () => clearInterval(id);
+  }, [isRunning, speed, gamePhase, runTick]);
+
+  // Auto-pause on game end
+  useEffect(() => {
+    if (gamePhase === "ended") setIsRunning(false);
+  }, [gamePhase]);
+
+  // ── Character event toasts ──────────────────────────────────────────────────
+  const prevEventRef = useRef<string>("");
+  useEffect(() => {
+    const latest = characterEvents[0];
+    if (latest && latest !== prevEventRef.current) {
+      prevEventRef.current = latest;
+      showToast(latest, "info");
+    }
+  }, [characterEvents]);
 
   // Reputation trend — compare across renders
   const prevRepRef   = useRef<number>(reputation);
@@ -292,32 +323,96 @@ export function DashboardLayout() {
         <BottomFeed />
       </div>
 
-      {/* ── Bottom bar ── */}
+      {/* ── Bottom bar: game controls ── */}
       <div style={styles.bottomBar}>
-        <TickButton />
+        {/* Play / Pause */}
+        <button
+          onClick={() => setIsRunning((r) => !r)}
+          className={isRunning ? "" : ""}
+          style={{
+            background: isRunning ? "#1a0808" : "#001a0d",
+            border: `1px solid ${isRunning ? "#ff444455" : "#00ff8855"}`,
+            color: isRunning ? "#ff4444" : "#00ff88",
+            fontFamily: FONT,
+            fontSize: "13px",
+            fontWeight: "bold",
+            padding: "6px 22px",
+            borderRadius: "3px",
+            cursor: "pointer",
+            letterSpacing: "0.07em",
+            minWidth: "110px",
+          }}
+        >
+          {isRunning ? "⏸ PAUSE" : "▶ PLAY"}
+        </button>
+
+        {/* Speed selector */}
+        <div style={{ display: "flex", gap: "2px" }}>
+          {([1, 2, 3] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setSpeed(s)}
+              style={{
+                background: speed === s ? "#1a1a0a" : "transparent",
+                border: `1px solid ${speed === s ? "#ffd70055" : "#1e1e1e"}`,
+                color: speed === s ? "#ffd700" : "#2a2a2a",
+                fontFamily: FONT,
+                fontSize: "10px",
+                padding: "5px 10px",
+                borderRadius: "2px",
+                cursor: "pointer",
+                letterSpacing: "0.04em",
+              }}
+            >
+              {s}×
+            </button>
+          ))}
+        </div>
+
+        {/* Manual step when paused */}
+        {!isRunning && (
+          <button
+            onClick={runTick}
+            style={{
+              background: "transparent",
+              border: "1px solid #2a2a2a",
+              color: "#444",
+              fontFamily: FONT,
+              fontSize: "10px",
+              padding: "5px 14px",
+              borderRadius: "2px",
+              cursor: "pointer",
+              letterSpacing: "0.06em",
+            }}
+          >
+            +1 Tick
+          </button>
+        )}
+
+        <div style={{ flex: 1 }} />
+
+        {/* Live score */}
+        <span style={{ fontSize: "10px", color: scoreColor, fontFamily: FONT, letterSpacing: "0.06em" }}>
+          Score {liveScore}
+        </span>
+
+        {/* End session */}
         <button
           onClick={endSession}
           style={{
             background: "transparent",
-            border: "1px solid #1e1e1e",
-            color: "#2a2a2a",
+            border: "1px solid #1a1a1a",
+            color: "#222",
             fontFamily: FONT,
             fontSize: "10px",
-            padding: "6px 16px",
+            padding: "5px 14px",
             borderRadius: "2px",
             cursor: "pointer",
             letterSpacing: "0.07em",
             textTransform: "uppercase" as const,
-            transition: "color 0.15s, border-color 0.15s",
           }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.color = "#555";
-            (e.currentTarget as HTMLButtonElement).style.borderColor = "#333";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.color = "#2a2a2a";
-            (e.currentTarget as HTMLButtonElement).style.borderColor = "#1e1e1e";
-          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#444"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "#222"; }}
         >
           End Session
         </button>
