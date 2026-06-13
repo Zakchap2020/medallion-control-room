@@ -2,7 +2,6 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { playSound, setMuted, getMuted } from "../../engine/soundEngine";
 import { useGameStore } from "../../state/store";
 import { DatasetCatalogue } from "../catalogue/DatasetCatalogue";
-import { AnalystPanel } from "../analysts/AnalystPanel";
 import { GovernancePanel } from "../governance/GovernancePanel";
 import { BottomFeed } from "../feed/BottomFeed";
 import { EndScreen } from "../endgame/EndScreen";
@@ -285,18 +284,8 @@ export function DashboardLayout() {
           <OrgMapPanel />
         </div>
 
-        {/* Right: Monitoring + Dataset Inspector */}
+        {/* Right: Dataset Inspector */}
         <div style={styles.rightPanel}>
-          {/* Analyst monitoring */}
-          <div style={styles.panelHeader}>
-            📡 Analyst Monitoring
-          </div>
-          <div style={{ padding: "8px", flexShrink: 0 }}>
-            <AnalystPanel />
-          </div>
-
-          <div style={styles.divider} />
-
           {/* Dataset inspector (governance + quality) */}
           <div style={{
             ...styles.panelHeader,

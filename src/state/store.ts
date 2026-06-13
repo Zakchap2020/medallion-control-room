@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import type {
   GameState,
-  Analyst,
   Department,
   PersonRoleType,
   GamePhase,

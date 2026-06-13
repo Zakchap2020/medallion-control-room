@@ -1,13 +1,101 @@
 import { useState } from "react";
 import { useGameStore } from "../../state/store";
-import type { Department, Incident, Dataset } from "../../models/types";
+import type { Department, Incident, Dataset, Analyst } from "../../models/types";
 import { departmentHealth } from "../../engine/orgMapEngine";
 import { DepartmentZone } from "./DepartmentZone";
 import { DepartmentDrillDown } from "./DepartmentDrillDown";
-import { AnalystToken } from "./AnalystToken";
+import { Avatar } from "../ui/Avatar";
 
 const FONT = "'Courier New', Courier, monospace";
-const DEPARTMENTS: Department[] = ["Finance", "Sales", "Marketing", "HR", "Operations"];
+
+const DEPT_COLORS: Record<string, string> = {
+  Finance: "#ffd700", Sales: "#00bfff", Marketing: "#ff69b4",
+  HR: "#98fb98", Operations: "#ffa500",
+};
+
+function SkillRow({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div style={{ marginBottom: "3px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
+        <span style={{ fontSize: "7px", color: "#252525", fontFamily: FONT, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+          {label}
+        </span>
+        <span style={{ fontSize: "7px", color: "#333", fontFamily: FONT }}>{value}</span>
+      </div>
+      <div style={{ height: "2px", background: "#111", borderRadius: "1px" }}>
+        <div style={{
+          height: "100%", width: `${value}%`, background: color,
+          borderRadius: "1px", opacity: 0.6, transition: "width 0.3s",
+        }} />
+      </div>
+    </div>
+  );
+}
+
+function BenchCard({
+  analyst,
+  onDragStart,
+}: {
+  analyst: Analyst;
+  onDragStart: (e: React.DragEvent, id: string) => void;
+}) {
+  const isDeployed = !!analyst.assignedDepartment;
+  const deptColor  = isDeployed ? (DEPT_COLORS[analyst.assignedDepartment!] ?? "#555") : "#1e1e1e";
+
+  return (
+    <div
+      draggable
+      onDragStart={(e) => onDragStart(e, analyst.id)}
+      style={{
+        flexShrink: 0,
+        width: "118px",
+        background: isDeployed ? "#0d0d0d" : "#0a0a0a",
+        border: `1px solid ${isDeployed ? deptColor + "44" : "#1a1a1a"}`,
+        borderLeft: `2px solid ${deptColor}`,
+        borderRadius: "3px",
+        padding: "7px 8px",
+        cursor: "grab",
+        userSelect: "none",
+        opacity: analyst.active === false ? 0.35 : 1,
+      }}
+    >
+      {/* Avatar + name row */}
+      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "7px" }}>
+        {analyst.avatarIndex !== undefined
+          ? <Avatar index={analyst.avatarIndex} size={26} />
+          : <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#1a1a1a" }} />
+        }
+        <div style={{ minWidth: 0 }}>
+          <div style={{
+            fontSize: "9px", color: "#c0c0c0", fontFamily: FONT,
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>
+            {analyst.name.split(" ")[0]}
+          </div>
+          <div style={{
+            fontSize: "8px", color: "#303030", fontFamily: FONT,
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>
+            {analyst.name.split(" ")[1] ?? ""}
+          </div>
+        </div>
+      </div>
+
+      <SkillRow label="Analysis" value={analyst.skills.analysis} color="#00bfff" />
+      <SkillRow label="Gov"      value={analyst.skills.governance} color="#00ff88" />
+
+      {/* Deployment badge */}
+      <div style={{
+        marginTop: "5px", fontSize: "7px",
+        color: isDeployed ? deptColor : "#1a1a1a",
+        fontFamily: FONT, letterSpacing: "0.05em", textTransform: "uppercase",
+        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+      }}>
+        {isDeployed ? `● ${analyst.assignedDepartment}` : "undeployed"}
+      </div>
+    </div>
+  );
+}
 
 function incidentCount(dept: Department, incidents: Incident[], datasets: Dataset[]): number {
   const ids = new Set(datasets.filter((d) => d.department === dept).map((d) => d.id));
@@ -44,8 +132,6 @@ export function OrgMapPanel() {
 
   const toggleDept = (dept: Department) =>
     setSelectedDept((prev) => (prev === dept ? null : dept));
-
-  const unassigned = analysts.filter((a) => !a.assignedDepartment);
 
   // Zone grid: 2 columns — Finance/Sales, Marketing/HR, Operations (full width)
   const zoneGrid: Array<{ dept: Department; span?: boolean }> = [
@@ -112,41 +198,34 @@ export function OrgMapPanel() {
         ))}
       </div>
 
-      {/* Analyst bench */}
+      {/* Analyst roster */}
       <div
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleBenchDrop}
         style={{
           flexShrink: 0,
           borderTop: "1px solid #141414",
-          padding: "6px 10px",
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          minHeight: "46px",
           background: "#060606",
         }}
       >
-        <span style={{
+        <div style={{
           fontSize: "8px", color: "#1e1e1e", textTransform: "uppercase",
-          letterSpacing: "0.1em", fontFamily: FONT, flexShrink: 0,
+          letterSpacing: "0.12em", fontFamily: FONT,
+          padding: "5px 10px 4px",
+          borderBottom: "1px solid #0e0e0e",
         }}>
-          Bench
-        </span>
-        {unassigned.length === 0 ? (
-          <span style={{ fontSize: "8px", color: "#141414", fontFamily: FONT }}>
-            all analysts deployed
-          </span>
-        ) : (
-          unassigned.map((a) => (
-            <AnalystToken key={a.id} analyst={a} onDragStart={handleDragStart} />
-          ))
-        )}
-        <span style={{
-          marginLeft: "auto", fontSize: "8px", color: "#151515", fontFamily: FONT,
+          Analysts — drag to deploy
+        </div>
+        <div style={{
+          display: "flex",
+          gap: "6px",
+          padding: "8px 10px",
+          overflowX: "auto",
         }}>
-          drag to zone · drag here to unassign
-        </span>
+          {analysts.map((analyst) => (
+            <BenchCard key={analyst.id} analyst={analyst} onDragStart={handleDragStart} />
+          ))}
+        </div>
       </div>
 
       {/* Drill-down overlay */}
