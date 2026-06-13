@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { playSound } from "../../engine/soundEngine";
 
 export type ToastType = "success" | "warning" | "error" | "info";
 
@@ -23,6 +24,9 @@ export function showToast(message: string, type: ToastType = "success") {
   window.dispatchEvent(
     new CustomEvent(EVENT, { detail: { id: _nextId++, message, type } })
   );
+  if (type === "success") playSound("toast_success");
+  else if (type === "warning") playSound("toast_warning");
+  else if (type === "error")   playSound("toast_error");
 }
 
 export function ToastStack() {

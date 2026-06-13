@@ -1,4 +1,5 @@
 import { useGameStore } from "../../state/store";
+import { playSound } from "../../engine/soundEngine";
 
 interface PriorityItem {
   id: string;
@@ -55,7 +56,7 @@ export function PriorityQueue() {
         detail: `T-${inc.timeToResolve}`,
         urgencyScore: baseScore + ttrBonus,
         actionLabel: "Resolve",
-        onAction: () => resolveIncident(inc.id),
+        onAction: () => { resolveIncident(inc.id); playSound("resolve_incident"); },
       });
     });
 
@@ -86,7 +87,7 @@ export function PriorityQueue() {
         detail: `${p.timeLimit}T left`,
         urgencyScore: baseScore + tlBonus,
         actionLabel: "Deliver",
-        onAction: () => completeExecPress(p.id),
+        onAction: () => { completeExecPress(p.id); playSound("toast_success"); },
       });
     });
 
@@ -103,7 +104,7 @@ export function PriorityQueue() {
         detail: `${s.riskLevel}% risk`,
         urgencyScore: s.riskLevel > 75 ? 65 : 40,
         actionLabel: "Contain",
-        onAction: () => containSilo(s.id),
+        onAction: () => { containSilo(s.id); playSound("silo_contained"); },
       });
     });
 

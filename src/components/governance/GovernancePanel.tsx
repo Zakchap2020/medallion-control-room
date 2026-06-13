@@ -1,8 +1,17 @@
 import { useState } from "react";
 import { useGameStore } from "../../state/store";
-import type { PersonRoleType, DatasetQuality, DataClassification } from "../../models/types";
+import type { PersonRoleType, DatasetQuality, DataClassification, PersonTrait } from "../../models/types";
 import { showToast } from "../ui/ToastStack";
 import { compositeQuality } from "../../engine/medallionEngine";
+import { playSound } from "../../engine/soundEngine";
+
+const TRAIT_COLORS: Record<PersonTrait, string> = {
+  methodical: "#00bfff",
+  ambitious:  "#ffa500",
+  veteran:    "#c8a800",
+  reliable:   "#00ff88",
+  transient:  "#ff6644",
+};
 
 interface Props {
   selectedDatasetId: string | null;
@@ -348,7 +357,9 @@ export function GovernancePanel({ selectedDatasetId }: Props) {
                 onClick={() => {
                   if (!canPromote) return;
                   promoteDataset(dataset.id);
-                  showToast(`${entry.name} promoted to ${dataset.layer === "bronze" ? "Silver" : "Gold"}`, "success");
+                  const toLayer = dataset.layer === "bronze" ? "Silver" : "Gold";
+                  showToast(`${entry.name} promoted to ${toLayer}`, "success");
+                  playSound(dataset.layer === "bronze" ? "promotion_silver" : "promotion_gold");
                 }}
                 title={canPromote ? `Promote to ${dataset.layer === "bronze" ? "Silver" : "Gold"}` : reason}
                 style={{
@@ -432,7 +443,22 @@ export function GovernancePanel({ selectedDatasetId }: Props) {
                     </button>
                   </div>
                   {current && (
-                    <span style={{ fontSize: "9px", color: "#00ff88" }}>✓ {current.name}</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                      <span style={{ fontSize: "9px", color: "#00ff88" }}>✓ {current.name}</span>
+                      {current.trait && (
+                        <span style={{
+                          fontSize: "7px",
+                          color: TRAIT_COLORS[current.trait],
+                          border: `1px solid ${TRAIT_COLORS[current.trait]}44`,
+                          borderRadius: "2px",
+                          padding: "1px 4px",
+                          letterSpacing: "0.04em",
+                          textTransform: "uppercase",
+                        }}>
+                          {current.trait}
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
                 {expandedDesc === role && (
@@ -461,6 +487,7 @@ export function GovernancePanel({ selectedDatasetId }: Props) {
                     const isInactive  = p.active === false;
                     const isDeparting = !!p.departsAtTick;
                     const ticksLeft   = isDeparting ? (p.departsAtTick! - tick) : null;
+                    const traitTag    = p.trait ? ` [${p.trait}]` : "";
                     const suffix      = isInactive
                       ? " [on leave]"
                       : isDeparting
@@ -470,7 +497,7 @@ export function GovernancePanel({ selectedDatasetId }: Props) {
                       : "";
                     return (
                       <option key={p.id} value={p.id} disabled={isInactive}>
-                        {p.name} (gov:{p.skills.governance}){suffix}
+                        {p.name}{traitTag} (gov:{p.skills.governance}){suffix}
                       </option>
                     );
                   })}

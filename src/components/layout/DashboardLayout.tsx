@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { playSound, setMuted, getMuted } from "../../engine/soundEngine";
 import { useGameStore } from "../../state/store";
 import { DatasetCatalogue } from "../catalogue/DatasetCatalogue";
 import { AnalystPanel } from "../analysts/AnalystPanel";
@@ -163,6 +164,7 @@ export function DashboardLayout() {
   // ── Real-time game loop ─────────────────────────────────────────────────────
   const [isRunning, setIsRunning]   = useState(false);
   const [speed, setSpeed]           = useState<1 | 2 | 3>(1);
+  const [sfxOff, setSfxOff]         = useState(getMuted());
   const SPEED_MS: Record<number, number> = { 1: 2200, 2: 1200, 3: 600 };
 
   const runTick = useCallback(() => {
@@ -180,15 +182,37 @@ export function DashboardLayout() {
     if (gamePhase === "ended") setIsRunning(false);
   }, [gamePhase]);
 
-  // ── Character event toasts ──────────────────────────────────────────────────
+  // ── Character event toasts + event-driven sounds ───────────────────────────
   const prevEventRef = useRef<string>("");
   useEffect(() => {
     const latest = characterEvents[0];
     if (latest && latest !== prevEventRef.current) {
       prevEventRef.current = latest;
       showToast(latest, "info");
+      if (latest.includes("leaving in"))      playSound("person_departing");
+      else if (latest.includes("has left"))   playSound("person_departing");
+      else if (latest.includes("BREACH"))     playSound("breach");
+      else if (latest.includes("audit PASSED")) playSound("audit_pass");
+      else if (latest.includes("audit FAILED")) playSound("audit_fail");
     }
   }, [characterEvents]);
+
+  // ── Tick sound ──────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (tick > 0 && isRunning) playSound("tick");
+  }, [tick]);
+
+  // ── Incident spawn sound ────────────────────────────────────────────────────
+  const prevIncCountRef = useRef(0);
+  useEffect(() => {
+    const open = incidents.filter((i) => i.status === "open").length;
+    if (open > prevIncCountRef.current) {
+      const newest = incidents.find((i) => i.status === "open");
+      if (newest?.severity === "critical") playSound("incident_critical");
+      else                                 playSound("incident_medium");
+    }
+    prevIncCountRef.current = open;
+  }, [incidents]);
 
   // Reputation trend — compare across renders
   const prevRepRef   = useRef<number>(reputation);
@@ -383,6 +407,29 @@ export function DashboardLayout() {
         <span style={{ fontSize: "10px", color: scoreColor, fontFamily: FONT, letterSpacing: "0.06em" }}>
           Score {liveScore}
         </span>
+
+        {/* SFX toggle */}
+        <button
+          onClick={() => {
+            const next = !sfxOff;
+            setSfxOff(next);
+            setMuted(next);
+            if (!next) playSound("toast_success");
+          }}
+          style={{
+            background: "transparent",
+            border: "1px solid #1a1a1a",
+            color: sfxOff ? "#1e1e1e" : "#2a2a2a",
+            fontFamily: FONT,
+            fontSize: "10px",
+            padding: "5px 12px",
+            borderRadius: "2px",
+            cursor: "pointer",
+            letterSpacing: "0.06em",
+          }}
+        >
+          {sfxOff ? "SFX OFF" : "SFX ON"}
+        </button>
 
         {/* End session */}
         <button

@@ -1,5 +1,6 @@
 import type { GameState, Incident, ExecutivePressure } from "../models/types";
 import { compositeQuality } from "./medallionEngine";
+import { TRAIT_DEPARTURE_CHANCE } from "./personnelGenerator";
 import { generateBronzeDatasets } from "./datasetGenerator";
 import { updateSiloRisks, spawnNewSilos, computeSiloTrustDelta } from "./siloEngine";
 import { generateSignals } from "./analystEngine";
@@ -166,17 +167,22 @@ export function runTick(state: GameState): Partial<GameState> {
       : p
   );
 
-  // Randomly schedule a new departure (~4% per tick, only if ≥2 active persons, no one already departing)
-  const activePersons = updatedPersons.filter((p) => p.active !== false && !p.departsAtTick);
+  // Randomly schedule a new departure — probability is trait-dependent
+  const activePersons    = updatedPersons.filter((p) => p.active !== false && !p.departsAtTick);
   const alreadyDeparting = updatedPersons.some((p) => !!p.departsAtTick);
-  if (!alreadyDeparting && activePersons.length > 2 && Math.random() < 0.04) {
-    const target = activePersons[Math.floor(Math.random() * activePersons.length)];
-    updatedPersons = updatedPersons.map((p) =>
-      p.id === target.id ? { ...p, departsAtTick: nextTick + 3 } : p
-    );
-    extraCharEvents.push(
-      `🔔 ${target.name} (${target.roleType}) has announced they will leave in 3 ticks.`
-    );
+  if (!alreadyDeparting && activePersons.length > 2) {
+    for (const candidate of activePersons) {
+      const chance = TRAIT_DEPARTURE_CHANCE[candidate.trait ?? "methodical"] ?? 0.04;
+      if (Math.random() < chance) {
+        updatedPersons = updatedPersons.map((p) =>
+          p.id === candidate.id ? { ...p, departsAtTick: nextTick + 3 } : p
+        );
+        extraCharEvents.push(
+          `🔔 ${candidate.name} (${candidate.roleType}) has announced they will leave in 3 ticks.`
+        );
+        break;
+      }
+    }
   }
 
   // 13. Data breach + unclassified sensitive data incidents

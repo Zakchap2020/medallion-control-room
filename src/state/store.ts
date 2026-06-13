@@ -2,7 +2,6 @@ import { create } from "zustand";
 import type {
   GameState,
   Analyst,
-  Person,
   Department,
   PersonRoleType,
   GamePhase,
@@ -11,20 +10,12 @@ import type {
 
 import { runTick } from "../engine/runTick";
 import { compositeQuality } from "../engine/medallionEngine";
+import { generatePersonnel } from "../engine/personnelGenerator";
 
 const INITIAL_ANALYSTS: Analyst[] = [
   { id: "analyst-1", name: "Alice Morgan", skills: { analysis: 7, governance: 5 }, active: true },
   { id: "analyst-2", name: "Ben Okafor",   skills: { analysis: 5, governance: 8 }, active: true },
   { id: "analyst-3", name: "Priya Shah",   skills: { analysis: 6, governance: 6 }, active: true },
-];
-
-const INITIAL_PERSONS: Person[] = [
-  { id: "person-1", name: "Jordan Hayes",  roleType: "owner",     skills: { governance: 8, analysis: 5, engineering: 4 } },
-  { id: "person-2", name: "Sam Nkosi",     roleType: "owner",     skills: { governance: 7, analysis: 6, engineering: 4 } },
-  { id: "person-3", name: "Maya Patel",    roleType: "steward",   skills: { governance: 6, analysis: 8, engineering: 5 } },
-  { id: "person-4", name: "Chris Adewale", roleType: "steward",   skills: { governance: 7, analysis: 7, engineering: 5 } },
-  { id: "person-5", name: "Taylor Obi",    roleType: "custodian", skills: { governance: 5, analysis: 4, engineering: 9 } },
-  { id: "person-6", name: "Ren Watanabe",  roleType: "custodian", skills: { governance: 5, analysis: 5, engineering: 8 } },
 ];
 
 interface GameStore extends GameState {
@@ -46,29 +37,31 @@ interface GameStore extends GameState {
   setClassification: (datasetId: string, classification: DataClassification | undefined) => void;
 }
 
-const INITIAL_GAME_STATE: GameState = {
-  datasets: [],
-  analysts: INITIAL_ANALYSTS,
-  persons: INITIAL_PERSONS,
-  silos: [],
-  signals: [],
-  catalogue: {},
-  incidents: [],
-  executivePressures: [],
-  healingEvents: [],
-  tick: 0,
-  trustScore: 0,
-  reputation: 50,
-  gamePhase: "playing" as GamePhase,
-  peakTrustScore: 0,
-  characterEvents: [],
-  nextAuditTick: 30,
-  auditsPassed: 0,
-  auditsFailed: 0,
-};
+function createInitialState(): GameState {
+  return {
+    datasets: [],
+    analysts: INITIAL_ANALYSTS,
+    persons: generatePersonnel(),
+    silos: [],
+    signals: [],
+    catalogue: {},
+    incidents: [],
+    executivePressures: [],
+    healingEvents: [],
+    tick: 0,
+    trustScore: 0,
+    reputation: 50,
+    gamePhase: "playing" as GamePhase,
+    peakTrustScore: 0,
+    characterEvents: [],
+    nextAuditTick: 30,
+    auditsPassed: 0,
+    auditsFailed: 0,
+  };
+}
 
 export const useGameStore = create<GameStore>((set, get) => ({
-  ...INITIAL_GAME_STATE,
+  ...createInitialState(),
 
   runTick: () => {
     const state = get();
@@ -191,7 +184,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   resetGame: () => {
-    set({ ...INITIAL_GAME_STATE });
+    set(createInitialState());
   },
 
   setClassification: (datasetId, classification) => {

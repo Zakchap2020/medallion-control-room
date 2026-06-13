@@ -62,12 +62,14 @@ export interface Signal {
 // ── Phase 3 ──────────────────────────────────────────────────────────────────
 
 export type PersonRoleType = "owner" | "steward" | "custodian";
+export type PersonTrait    = "methodical" | "ambitious" | "veteran" | "reliable" | "transient";
 
 export interface Person {
   id: string;
   name: string;
   roleType: PersonRoleType;
   skills: { governance: number; analysis: number; engineering: number };
+  trait?: PersonTrait;
   active?: boolean;
   departsAtTick?: number;
   returnsAtTick?: number;
